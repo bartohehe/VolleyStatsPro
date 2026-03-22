@@ -1,0 +1,1243 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
+using VolleyStatsPro.Controls;
+using VolleyStatsPro.Data;
+using VolleyStatsPro.Helpers;
+using VolleyStatsPro.Models;
+
+namespace VolleyStatsPro.Views
+{
+    public class LiveMatchView : System.Windows.Controls.UserControl
+    {
+        // ── Repos ──────────────────────────────────────────────────────────────
+        private readonly MatchRepository  _matchRepo  = new();
+        private readonly SetRepository    _setRepo    = new();
+        private readonly RallyRepository  _rallyRepo  = new();
+        private readonly PlayerRepository _playerRepo = new();
+
+        // ── Match state ────────────────────────────────────────────────────────
+        private Models.Match? _match;
+        private Set?           _currentSet;
+        private Rally?         _currentRally;
+        private Team?          _homeTeam, _awayTeam;
+        private Dictionary<int, Player> _homePlayers = new(); // jersey# → Player
+        private Dictionary<int, Player> _awayPlayers = new();
+        private int _selectedZone = 0;
+
+        // ── UI refs ────────────────────────────────────────────────────────────
+        private TextBlock           _lblMatchTitle = null!;
+        private TextBlock           _lblCurrentSet = null!;
+        private TextBlock           _lblHomeScore  = null!;
+        private TextBlock           _lblAwayScore  = null!;
+        private TextBlock           _lblSetScore   = null!;
+        private StackPanel          _consoleLines  = null!;
+        private ScrollViewer        _consoleScroll = null!;
+        private TextBox             _consoleInput  = null!;
+        private Button[]            _zoneBtns      = new Button[6];
+        private CourtHeatmapControl _heatmap       = null!;
+
+        // ── Rotation state ─────────────────────────────────────────────────────
+        // _homeRotation[i] = jersey# of player at position (i+1); i=0 is pos-1 (server)
+        private int[]      _homeRotation = new int[6];
+        private int[]      _awayRotation = new int[6];
+        private bool       _homeServing  = true;
+        private TextBlock  _lblServingInd  = null!;
+        private TextBlock[] _homeRotNums   = new TextBlock[6];
+        private TextBlock[] _awayRotNums   = new TextBlock[6];
+        private Border[]    _homeRotCells  = new Border[6];
+        private Border[]    _awayRotCells  = new Border[6];
+
+        // ── Navigation ─────────────────────────────────────────────────────────
+        public event EventHandler? NavigateBack;
+
+        // ── Console history ────────────────────────────────────────────────────
+        private readonly List<string> _inputHistory = new();
+        private int _historyIdx = -1;
+
+        // ── Console palette ────────────────────────────────────────────────────
+        private static readonly SolidColorBrush ConsoleBg     = Freeze(new SolidColorBrush(Color.FromRgb( 8, 10, 18)));
+        private static readonly SolidColorBrush ConsolePrompt = Freeze(new SolidColorBrush(Color.FromRgb( 0,188,140)));
+        private static readonly SolidColorBrush ConsoleInput  = Freeze(new SolidColorBrush(Color.FromRgb(240,245,255)));
+        private static readonly SolidColorBrush ConsoleOk     = Freeze(new SolidColorBrush(Color.FromRgb( 34,197, 94)));
+        private static readonly SolidColorBrush ConsoleErr    = Freeze(new SolidColorBrush(Color.FromRgb(239, 68, 68)));
+        private static readonly SolidColorBrush ConsoleSys    = Freeze(new SolidColorBrush(Color.FromRgb(130,150,185)));
+        private static readonly SolidColorBrush ConsoleRally  = Freeze(new SolidColorBrush(Color.FromRgb(251,191, 36)));
+        private static readonly FontFamily ConsoleFont = new FontFamily("Consolas, Courier New");
+        private const double ConsoleFontSize = 11.5;
+
+        private static SolidColorBrush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
+
+        // ──────────────────────────────────────────────────────────────────────
+
+        public LiveMatchView()
+        {
+            Background = Theme.BrushBgDark;
+            Content    = BuildUI();
+        }
+
+        public void LoadMatch(int matchId)
+        {
+            _match = _matchRepo.GetById(matchId);
+            if (_match == null) return;
+
+            _lblMatchTitle.Text = $"{_match.HomeTeamName}  vs  {_match.AwayTeamName}";
+            _lblHomeScore.Text  = _match.HomeScore.ToString();
+            _lblAwayScore.Text  = _match.AwayScore.ToString();
+
+            _homeTeam = new TeamRepository().GetById(_match.HomeTeamId);
+            _awayTeam = new TeamRepository().GetById(_match.AwayTeamId);
+
+            _homePlayers = _playerRepo.GetByTeam(_match.HomeTeamId)
+                                      .ToDictionary(p => p.Number, p => p);
+            _awayPlayers = _playerRepo.GetByTeam(_match.AwayTeamId)
+                                      .ToDictionary(p => p.Number, p => p);
+
+            var sets = _setRepo.GetByMatch(matchId);
+            if (sets.Count == 0)
+            {
+                _currentSet    = new Set { MatchId = matchId, SetNumber = 1 };
+                _currentSet.Id = _setRepo.Insert(_currentSet);
+            }
+            else
+            {
+                _currentSet = sets.LastOrDefault(s => !s.IsComplete) ?? sets.Last();
+            }
+
+            // Replay existing actions
+            var existing = _rallyRepo.GetActionsForMatch(matchId);
+            if (existing.Count > 0)
+            {
+                AppendSys($"Loaded {existing.Count} previous actions.");
+                foreach (var a in existing.TakeLast(20))
+                    AppendSys($"  {FormatLoadedAction(a)}");
+            }
+
+            AppendSys("──────────────────────────────────────────────────────");
+            AppendSys($"Match: {_match.HomeTeamName} (home)  vs  {_match.AwayTeamName} (away)");
+            AppendSys("──────────────────────────────────────────────────────");
+            AppendSys("Format:  [a]<num><action>[sub][zone][result]");
+            AppendSys("  S=Serve  R=Reception  A=Attack  B=Block  D=Dig  E=Set");
+            AppendSys("  Sub:  H=float  M=jump-float  Q=jump  T=underhand");
+            AppendSys("  Attack combos: X1 X5 X6 V5 V6 XP VP PP …");
+            AppendSys("  Result: #=perfect  +=positive  !=overpass");
+            AppendSys("         /=freeball  -=negative  ==error");
+            AppendSys("  Compound: 12SM6.17#  (serve.reception)");
+            AppendSys("  Commands: /er h|a /es /em /help /clear");
+            AppendSys("──────────────────────────────────────────────────────");
+
+            UpdateSetLabel();
+            StartNewRally();
+            UpdateRotationDisplay();
+            // Prompt for starting lineup on new match (no existing actions)
+            if (existing.Count == 0)
+                Dispatcher.BeginInvoke((System.Action)ShowLineupDialog);
+            _consoleInput.Focus();
+        }
+
+        // ── UI construction ────────────────────────────────────────────────────
+
+        private UIElement BuildUI()
+        {
+            var root = new DockPanel { Background = Theme.BrushBgDark };
+
+            var topBar = BuildTopBar();
+            DockPanel.SetDock(topBar, Dock.Top);
+            root.Children.Add(topBar);
+
+            var leftPanel = BuildLeftPanel();
+            DockPanel.SetDock(leftPanel, Dock.Left);
+            root.Children.Add(leftPanel);
+
+            var legendPanel = BuildLegendPanel();
+            DockPanel.SetDock(legendPanel, Dock.Right);
+            root.Children.Add(legendPanel);
+
+            root.Children.Add(BuildConsole()); // fills center
+            return root;
+        }
+
+        private UIElement BuildTopBar()
+        {
+            var bar = new Border
+            {
+                Background      = Theme.BrushBgPanel,
+                Height          = 70,
+                BorderBrush     = Theme.BrushBorder,
+                BorderThickness = new Thickness(0, 0, 0, 1)
+            };
+            var g = new Grid();
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var titles = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 0, 20, 0) };
+            _lblMatchTitle = new TextBlock { Text = "No Match Loaded", Foreground = Theme.BrushTextPrimary, FontFamily = Theme.FontFamily, FontSize = Theme.SizeH2, FontWeight = FontWeights.SemiBold };
+            _lblCurrentSet = new TextBlock { Text = "Set 1", Foreground = Theme.BrushTextSecond, FontFamily = Theme.FontFamily, FontSize = Theme.SizeH3 };
+            titles.Children.Add(_lblMatchTitle);
+            titles.Children.Add(_lblCurrentSet);
+            Grid.SetColumn(titles, 0);
+
+            var scores = new StackPanel { Orientation = Orientation.Vertical, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var scoreRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+            _lblHomeScore = new TextBlock { Text = "0", Foreground = Theme.BrushAccent,     FontFamily = Theme.FontFamily, FontSize = 28, FontWeight = FontWeights.Bold, Margin = new Thickness(0,0,12,0) };
+            _lblAwayScore = new TextBlock { Text = "0", Foreground = Theme.BrushAccentBlue, FontFamily = Theme.FontFamily, FontSize = 28, FontWeight = FontWeights.Bold };
+            scoreRow.Children.Add(_lblHomeScore);
+            scoreRow.Children.Add(new TextBlock { Text = ":", Foreground = Theme.BrushTextSecond, FontFamily = Theme.FontFamily, FontSize = 28, FontWeight = FontWeights.Bold, Margin = new Thickness(0,0,12,0) });
+            scoreRow.Children.Add(_lblAwayScore);
+            _lblSetScore = new TextBlock { Text = "0 : 0", Foreground = Theme.BrushTextSecond, FontFamily = Theme.FontFamily, FontSize = Theme.SizeH3, HorizontalAlignment = HorizontalAlignment.Center };
+            scores.Children.Add(scoreRow);
+            scores.Children.Add(_lblSetScore);
+            Grid.SetColumn(scores, 1);
+
+            // Back button (column 2)
+            var backContent = new StackPanel { Orientation = Orientation.Horizontal };
+            backContent.Children.Add(new TextBlock
+            {
+                Text              = "\uE76B",
+                FontFamily        = new FontFamily("Segoe MDL2 Assets"),
+                FontSize          = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin            = new Thickness(0, 0, 6, 0)
+            });
+            backContent.Children.Add(new TextBlock
+            {
+                Text              = "Matches",
+                FontFamily        = Theme.FontFamily,
+                FontSize          = Theme.SizeBody,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            var backBtn = new Button
+            {
+                Content    = backContent,
+                Height     = 30,
+                Padding    = new Thickness(10, 0, 10, 0),
+                Background = Theme.BrushBgHover,
+                Foreground = Theme.BrushTextSecond,
+                Margin     = new Thickness(0, 0, 16, 0),
+                Style      = (Style)Application.Current.Resources["FlatButton"]
+            };
+            backBtn.Click += (_, _) => NavigateBack?.Invoke(this, EventArgs.Empty);
+            Grid.SetColumn(backBtn, 2);
+
+            g.Children.Add(titles);
+            g.Children.Add(scores);
+            g.Children.Add(backBtn);
+            bar.Child = g;
+            return bar;
+        }
+
+        private UIElement BuildLeftPanel()
+        {
+            var panel = new Border
+            {
+                Width           = 320,
+                Background      = Theme.BrushBgCard,
+                BorderBrush     = Theme.BrushBorder,
+                BorderThickness = new Thickness(0, 0, 1, 0)
+            };
+            var sp = new StackPanel { Orientation = Orientation.Vertical };
+
+            // Heatmap at top, bigger
+            _heatmap = new CourtHeatmapControl { Title = "Live Heatmap", Height = 320, Margin = new Thickness(8, 10, 8, 4) };
+            sp.Children.Add(_heatmap);
+
+            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 6, 0, 6) });
+
+            // Zone label
+            sp.Children.Add(new TextBlock { Text = "Zone (click to pre-select)", Foreground = Theme.BrushTextSecond, FontFamily = Theme.FontFamily, FontSize = Theme.SizeSmall, Margin = new Thickness(10, 0, 0, 4) });
+
+            // Zone grid 2×3  (standard 6-zone layout: row1=4,3,2  row2=5,6,1)
+            var zg = new UniformGrid { Rows = 2, Columns = 3, Height = 100, Margin = new Thickness(8, 0, 8, 4) };
+            int[] zoneLayout = { 4, 3, 2, 5, 6, 1 };
+            for (int i = 0; i < 6; i++)
+            {
+                int z   = zoneLayout[i];
+                var btn = MakeZoneButton(z.ToString());
+                int captZ = z;
+                btn.Click += (_, _) => SelectZone(captZ);
+                _zoneBtns[z - 1] = btn;
+                zg.Children.Add(btn);
+            }
+            sp.Children.Add(zg);
+
+            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 6, 0, 6) });
+
+            // Control buttons — rally point row
+            var rallyRow = new Grid { Margin = new Thickness(8, 3, 8, 3) };
+            rallyRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            rallyRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
+            rallyRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var btnHomePoint = MakeCtrlButton("HOME pt (/er h)", Theme.AccentBlue);
+            btnHomePoint.Click += (_, _) => CmdEndRally(homeWins: true);
+            Grid.SetColumn(btnHomePoint, 0);
+
+            var btnAwayPoint = MakeCtrlButton("AWAY pt (/er a)", Color.FromRgb(80, 80, 180));
+            btnAwayPoint.Click += (_, _) => CmdEndRally(homeWins: false);
+            Grid.SetColumn(btnAwayPoint, 2);
+
+            rallyRow.Children.Add(btnHomePoint);
+            rallyRow.Children.Add(btnAwayPoint);
+            sp.Children.Add(rallyRow);
+
+            var btnEndSet = MakeCtrlButton("End Set (/es)", Theme.Warning);
+            btnEndSet.Margin = new Thickness(8, 3, 8, 3);
+            var btnEndMatch = MakeCtrlButton("End Match (/em)", Theme.Danger);
+            btnEndMatch.Margin = new Thickness(8, 3, 8, 3);
+
+            btnEndSet.Click   += (_, _) => CmdEndSet();
+            btnEndMatch.Click += (_, _) => CmdEndMatch();
+
+            sp.Children.Add(btnEndSet);
+            sp.Children.Add(btnEndMatch);
+
+            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 6, 0, 6) });
+            sp.Children.Add(BuildRotationSection());
+
+            var scroll = new ScrollViewer
+            {
+                Content                       = sp,
+                VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            };
+            panel.Child = scroll;
+            return panel;
+        }
+
+        private UIElement BuildRotationSection()
+        {
+            var sp = new StackPanel { Margin = new Thickness(8, 0, 8, 8) };
+
+            // Header
+            var headerRow = new Grid();
+            headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            sp.Children.Add(new TextBlock
+            {
+                Text       = "ROTATION",
+                Foreground = Theme.BrushTextSecond,
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                FontWeight = FontWeights.Bold,
+                Margin     = new Thickness(0, 0, 0, 4)
+            });
+
+            // Serving indicator
+            _lblServingInd = new TextBlock
+            {
+                Foreground = Theme.BrushAccent,
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                FontWeight = FontWeights.Bold,
+                Margin     = new Thickness(0, 0, 0, 6)
+            };
+            sp.Children.Add(_lblServingInd);
+
+            // Set Lineup button
+            var btnSetLineup = new Button
+            {
+                Content         = "Set Lineup",
+                Height          = 26,
+                Margin          = new Thickness(0, 0, 0, 8),
+                Background      = Theme.BrushBgHover,
+                Foreground      = Theme.BrushTextSecond,
+                FontFamily      = Theme.FontFamily,
+                FontSize        = Theme.SizeSmall,
+                Style           = (Style)Application.Current.Resources["FlatButton"]
+            };
+            btnSetLineup.Click += (_, _) => ShowLineupDialog();
+            sp.Children.Add(btnSetLineup);
+
+            // Home rotation grid
+            sp.Children.Add(new TextBlock
+            {
+                Foreground = Theme.BrushTextSecond,
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                Margin     = new Thickness(0, 0, 0, 2)
+            }); // placeholder, will be set in UpdateRotationDisplay
+            ((TextBlock)sp.Children[sp.Children.Count - 1]).Text = "Home";
+
+            sp.Children.Add(BuildRotGrid(isHome: true));
+
+            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 4, 0, 4) });
+
+            // Away rotation grid
+            sp.Children.Add(new TextBlock
+            {
+                Text       = "Away",
+                Foreground = Theme.BrushTextSecond,
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                Margin     = new Thickness(0, 0, 0, 2)
+            });
+            sp.Children.Add(BuildRotGrid(isHome: false));
+
+            return sp;
+        }
+
+        // Court layout row0=[pos1,pos6,pos5]  row1=[pos2,pos3,pos4]
+        private static readonly int[,] RotLayout = { { 1, 6, 5 }, { 2, 3, 4 } };
+
+        private UIElement BuildRotGrid(bool isHome)
+        {
+            var g = new UniformGrid { Rows = 2, Columns = 3 };
+            for (int row = 0; row < 2; row++)
+            {
+                for (int col = 0; col < 3; col++)
+                {
+                    int pos = RotLayout[row, col];
+                    int idx = pos - 1; // array index
+
+                    var posLbl = new TextBlock
+                    {
+                        Text              = pos.ToString(),
+                        Foreground        = Theme.BrushTextSecond,
+                        FontFamily        = Theme.FontFamily,
+                        FontSize          = 8,
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                        Margin            = new Thickness(3, 2, 0, 0)
+                    };
+                    var numLbl = new TextBlock
+                    {
+                        Text              = "—",
+                        Foreground        = Theme.BrushTextPrimary,
+                        FontFamily        = Theme.FontFamily,
+                        FontSize          = 12,
+                        FontWeight        = FontWeights.SemiBold,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin            = new Thickness(0, 0, 0, 2)
+                    };
+
+                    if (isHome) { _homeRotNums[idx] = numLbl; }
+                    else        { _awayRotNums[idx] = numLbl; }
+
+                    var inner = new DockPanel();
+                    DockPanel.SetDock(posLbl, Dock.Top);
+                    inner.Children.Add(posLbl);
+                    inner.Children.Add(numLbl);
+
+                    var cell = new Border
+                    {
+                        BorderBrush     = Theme.BrushBorder,
+                        BorderThickness = new Thickness(1),
+                        Margin          = new Thickness(1),
+                        MinHeight       = 42,
+                        Child           = inner
+                    };
+
+                    if (isHome) { _homeRotCells[idx] = cell; }
+                    else        { _awayRotCells[idx] = cell; }
+
+                    g.Children.Add(cell);
+                }
+            }
+            return g;
+        }
+
+        private void UpdateRotationDisplay()
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                _homeRotNums[i].Text = _homeRotation[i] > 0 ? $"#{_homeRotation[i]}" : "—";
+                _awayRotNums[i].Text = _awayRotation[i] > 0 ? $"#{_awayRotation[i]}" : "—";
+
+                // Highlight server cell (position 1 = index 0)
+                _homeRotCells[i].Background = (i == 0 && _homeServing)
+                    ? new SolidColorBrush(Color.FromArgb(60, 0, 188, 140))
+                    : Brushes.Transparent;
+                _awayRotCells[i].Background = (i == 0 && !_homeServing)
+                    ? new SolidColorBrush(Color.FromArgb(60, 80, 80, 220))
+                    : Brushes.Transparent;
+            }
+
+            _lblServingInd.Text = _homeServing
+                ? $"▶ {_match?.HomeTeamName ?? "Home"} serving"
+                : $"▶ {_match?.AwayTeamName ?? "Away"} serving";
+            _lblServingInd.Foreground = _homeServing ? Theme.BrushAccent : Theme.BrushAccentBlue;
+        }
+
+        private void ApplyRotation(bool homeWins)
+        {
+            bool homeWasServing = _homeServing;
+            _homeServing = homeWins;
+
+            if (homeWins && !homeWasServing)
+                _homeRotation = RotateTeam(_homeRotation);
+            else if (!homeWins && homeWasServing)
+                _awayRotation = RotateTeam(_awayRotation);
+
+            UpdateRotationDisplay();
+        }
+
+        private static int[] RotateTeam(int[] r)
+        {
+            // Gaining the serve: player in pos2 → pos1 (server), 3→2, … 1→6
+            // In array: new[i] = old[(i+1) % 6]
+            var n = new int[6];
+            for (int i = 0; i < 6; i++) n[i] = r[(i + 1) % 6];
+            return n;
+        }
+
+        private void ShowLineupDialog()
+        {
+            if (_match == null) return;
+
+            var homeTb = new TextBox[6];
+            var awayTb = new TextBox[6];
+            bool dlgHomeServing = _homeServing;
+
+            // Serving toggle buttons (kept in closure)
+            Button? btnDlgHome = null, btnDlgAway = null;
+            void RefreshServingBtns()
+            {
+                if (btnDlgHome == null || btnDlgAway == null) return;
+                btnDlgHome.Background = dlgHomeServing
+                    ? new SolidColorBrush(Theme.Accent)
+                    : Theme.BrushBgHover;
+                btnDlgAway.Background = !dlgHomeServing
+                    ? new SolidColorBrush(Color.FromRgb(80, 80, 220))
+                    : Theme.BrushBgHover;
+            }
+
+            var dlg = new Window
+            {
+                Title                   = $"Set Lineup — Set {_currentSet?.SetNumber}",
+                Width                   = 520,
+                Height                  = 370,
+                ResizeMode              = ResizeMode.NoResize,
+                WindowStartupLocation   = WindowStartupLocation.CenterOwner,
+                Owner                   = Application.Current.MainWindow,
+                Background              = new SolidColorBrush(Color.FromRgb(10, 14, 24)),
+                ShowInTaskbar           = false
+            };
+
+            var root = new DockPanel { Margin = new Thickness(16) };
+
+            // Bottom buttons
+            var botRow = new StackPanel
+            {
+                Orientation         = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin              = new Thickness(0, 10, 0, 0)
+            };
+            var btnCancel = new Button { Content = "Cancel", Width = 80, Height = 28, Margin = new Thickness(0,0,8,0),
+                Background = Theme.BrushBgHover, Foreground = Theme.BrushTextSecond, FontFamily = Theme.FontFamily,
+                Style = (Style)Application.Current.Resources["FlatButton"] };
+            btnCancel.Click += (_, _) => dlg.Close();
+
+            var btnSave = new Button { Content = "Save Lineup", Width = 100, Height = 28,
+                Background = new SolidColorBrush(Theme.Accent), Foreground = Brushes.White,
+                FontFamily = Theme.FontFamily,
+                Style = (Style)Application.Current.Resources["FlatButton"] };
+            btnSave.Click += (_, _) =>
+            {
+                int[] ParseInputs(TextBox[] tbs, int[]? existing)
+                {
+                    var arr = new int[6];
+                    for (int i = 0; i < 6; i++)
+                    {
+                        if (int.TryParse(tbs[i].Text.Trim(), out int n) && n >= 0)
+                            arr[i] = n;
+                        else if (existing != null)
+                            arr[i] = existing[i];
+                    }
+                    return arr;
+                }
+                _homeRotation = ParseInputs(homeTb, _homeRotation);
+                _awayRotation = ParseInputs(awayTb, _awayRotation);
+                _homeServing  = dlgHomeServing;
+                UpdateRotationDisplay();
+                dlg.DialogResult = true;
+            };
+            botRow.Children.Add(btnCancel);
+            botRow.Children.Add(btnSave);
+            DockPanel.SetDock(botRow, Dock.Bottom);
+            root.Children.Add(botRow);
+
+            // Serving row
+            var servingRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+            servingRow.Children.Add(new TextBlock { Text = "Serving first: ", Foreground = Theme.BrushTextSecond,
+                FontFamily = Theme.FontFamily, FontSize = Theme.SizeSmall, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0,0,6,0) });
+            btnDlgHome = new Button { Content = _match.HomeTeamName, Height = 24, Padding = new Thickness(8,0,8,0),
+                Foreground = Brushes.White, FontFamily = Theme.FontFamily, FontSize = Theme.SizeSmall,
+                Style = (Style)Application.Current.Resources["FlatButton"] };
+            btnDlgHome.Click += (_, _) => { dlgHomeServing = true;  RefreshServingBtns(); };
+            btnDlgAway = new Button { Content = _match.AwayTeamName, Height = 24, Padding = new Thickness(8,0,8,0),
+                Foreground = Brushes.White, FontFamily = Theme.FontFamily, FontSize = Theme.SizeSmall,
+                Margin = new Thickness(6,0,0,0),
+                Style = (Style)Application.Current.Resources["FlatButton"] };
+            btnDlgAway.Click += (_, _) => { dlgHomeServing = false; RefreshServingBtns(); };
+            servingRow.Children.Add(btnDlgHome);
+            servingRow.Children.Add(btnDlgAway);
+            DockPanel.SetDock(servingRow, Dock.Top);
+            root.Children.Add(servingRow);
+            RefreshServingBtns();
+
+            // Two-column lineup grid
+            var cols = new Grid();
+            cols.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            cols.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+            cols.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            UIElement MakeLineupGrid(string teamName, TextBox[] tbs, int[] existing, int colIdx)
+            {
+                var sp2 = new StackPanel();
+                sp2.Children.Add(new TextBlock { Text = teamName, Foreground = Theme.BrushTextPrimary,
+                    FontFamily = Theme.FontFamily, FontSize = Theme.SizeBody, FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 6) });
+
+                var ug = new UniformGrid { Rows = 2, Columns = 3 };
+                for (int row = 0; row < 2; row++)
+                {
+                    for (int c2 = 0; c2 < 3; c2++)
+                    {
+                        int pos = RotLayout[row, c2];
+                        int idx = pos - 1;
+                        var cell = new StackPanel { Margin = new Thickness(2) };
+                        cell.Children.Add(new TextBlock
+                        {
+                            Text      = pos == 1 ? "1 ▶" : pos.ToString(),
+                            Foreground = pos == 1 ? Theme.BrushAccent : Theme.BrushTextSecond,
+                            FontFamily = Theme.FontFamily,
+                            FontSize   = 9,
+                            Margin     = new Thickness(0, 0, 0, 2)
+                        });
+                        var tb = new TextBox
+                        {
+                            Text            = existing[idx] > 0 ? existing[idx].ToString() : "",
+                            Background      = new SolidColorBrush(Color.FromRgb(18, 24, 38)),
+                            Foreground      = Theme.BrushTextPrimary,
+                            CaretBrush      = Theme.BrushAccent,
+                            BorderBrush     = Theme.BrushBorder,
+                            BorderThickness = new Thickness(1),
+                            FontFamily      = Theme.FontFamily,
+                            FontSize        = Theme.SizeBody,
+                            Padding         = new Thickness(4, 2, 4, 2),
+                            MaxLength       = 3,
+                            TextAlignment   = TextAlignment.Center
+                        };
+                        tbs[idx] = tb;
+                        cell.Children.Add(tb);
+                        ug.Children.Add(cell);
+                    }
+                }
+                sp2.Children.Add(ug);
+                Grid.SetColumn(sp2, colIdx);
+                return sp2;
+            }
+
+            var homeGrid = MakeLineupGrid(_match.HomeTeamName, homeTb, _homeRotation, 0);
+            var awayGrid = MakeLineupGrid(_match.AwayTeamName, awayTb, _awayRotation, 2);
+            cols.Children.Add(homeGrid);
+            cols.Children.Add(awayGrid);
+            root.Children.Add(cols);
+
+            dlg.Content = root;
+            dlg.ShowDialog();
+        }
+
+        private UIElement BuildLegendPanel()
+        {
+            var panel = new Border
+            {
+                Width           = 220,
+                Background      = Theme.BrushBgCard,
+                BorderBrush     = Theme.BrushBorder,
+                BorderThickness = new Thickness(1, 0, 0, 0)
+            };
+
+            var scroll = new ScrollViewer
+            {
+                VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            };
+
+            var sp = new StackPanel { Margin = new Thickness(10, 10, 10, 10) };
+
+            void Section(string title)
+            {
+                sp.Children.Add(new TextBlock
+                {
+                    Text       = title,
+                    Foreground = Theme.BrushAccent,
+                    FontFamily = ConsoleFont,
+                    FontSize   = 10,
+                    FontWeight = FontWeights.Bold,
+                    Margin     = new Thickness(0, 10, 0, 3)
+                });
+                sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 0, 0, 4) });
+            }
+
+            void Row(string code, string desc, SolidColorBrush? color = null)
+            {
+                var row = new Grid { Margin = new Thickness(0, 1, 0, 1) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var codeBlock = new TextBlock
+                {
+                    Text       = code,
+                    Foreground = color ?? ConsolePrompt,
+                    FontFamily = ConsoleFont,
+                    FontSize   = 10,
+                    FontWeight = FontWeights.Bold
+                };
+                Grid.SetColumn(codeBlock, 0);
+
+                var descBlock = new TextBlock
+                {
+                    Text         = desc,
+                    Foreground   = ConsoleSys,
+                    FontFamily   = ConsoleFont,
+                    FontSize     = 10,
+                    TextWrapping = TextWrapping.Wrap
+                };
+                Grid.SetColumn(descBlock, 1);
+
+                row.Children.Add(codeBlock);
+                row.Children.Add(descBlock);
+                sp.Children.Add(row);
+            }
+
+            // Header
+            sp.Children.Add(new TextBlock
+            {
+                Text       = "CODE REFERENCE",
+                Foreground = Theme.BrushTextPrimary,
+                FontFamily = ConsoleFont,
+                FontSize   = 10.5,
+                FontWeight = FontWeights.Bold,
+                Margin     = new Thickness(0, 0, 0, 2)
+            });
+            sp.Children.Add(new TextBlock
+            {
+                Text         = "[a]<##><action>[sub][zone][result]",
+                Foreground   = ConsoleInput,
+                FontFamily   = ConsoleFont,
+                FontSize     = 9.5,
+                TextWrapping = TextWrapping.Wrap,
+                Margin       = new Thickness(0, 0, 0, 0)
+            });
+
+            Section("ACTIONS");
+            Row("S", "Serve");
+            Row("R", "Reception");
+            Row("A", "Attack");
+            Row("B", "Block");
+            Row("D", "Dig");
+            Row("E", "Set");
+            Row("F", "FreeBall");
+
+            Section("SERVE SUB");
+            Row("H", "Float");
+            Row("M", "Jump-float");
+            Row("Q", "Jump-topspin");
+            Row("T", "Underhand");
+
+            Section("ATTACK COMBO");
+            Row("X1", "Quick");
+            Row("X5", "5 quick");
+            Row("X6", "6 quick");
+            Row("XP", "Pipe");
+            Row("V5", "V5");
+            Row("V6", "V6");
+            Row("VP", "V-pipe");
+            Row("PP", "Setter dump");
+
+            Section("RESULTS");
+            Row("#", "Perfect");
+            Row("+", "Positive",  ConsoleOk);
+            Row("!",  "Overpass",  ConsoleRally);
+            Row("/",  "Freeball",  ConsoleSys);
+            Row("-",  "Negative",  ConsoleRally);
+            Row("=",  "Error",     ConsoleErr);
+
+            Section("TEAM PREFIX");
+            Row("a",  "Away team (none = home)");
+
+            Section("COMMANDS");
+            Row("/er h", "Home wins rally",  ConsoleRally);
+            Row("/er a", "Away wins rally",  ConsoleRally);
+            Row("/es", "End set",    ConsoleRally);
+            Row("/em", "End match",  ConsoleErr);
+            Row("/cl", "Clear log");
+            Row("/h",  "Help");
+
+            Section("EXAMPLE");
+            sp.Children.Add(new TextBlock
+            {
+                Text         = "12SM6#",
+                Foreground   = ConsoleOk,
+                FontFamily   = ConsoleFont,
+                FontSize     = 10,
+                FontWeight   = FontWeights.Bold
+            });
+            sp.Children.Add(new TextBlock
+            {
+                Text         = "Home #12 jump-float serve zone 6 — perfect",
+                Foreground   = ConsoleSys,
+                FontFamily   = ConsoleFont,
+                FontSize     = 9.5,
+                TextWrapping = TextWrapping.Wrap,
+                Margin       = new Thickness(0, 2, 0, 4)
+            });
+            sp.Children.Add(new TextBlock
+            {
+                Text         = "a17R+",
+                Foreground   = ConsoleOk,
+                FontFamily   = ConsoleFont,
+                FontSize     = 10,
+                FontWeight   = FontWeights.Bold
+            });
+            sp.Children.Add(new TextBlock
+            {
+                Text         = "Away #17 reception — positive",
+                Foreground   = ConsoleSys,
+                FontFamily   = ConsoleFont,
+                FontSize     = 9.5,
+                TextWrapping = TextWrapping.Wrap,
+                Margin       = new Thickness(0, 2, 0, 0)
+            });
+
+            scroll.Content = sp;
+            panel.Child    = scroll;
+            return panel;
+        }
+
+        private UIElement BuildConsole()
+        {
+            var outer = new DockPanel { Background = ConsoleBg };
+
+            // Input row at bottom
+            var inputRow = new Border
+            {
+                Background      = Color.FromRgb(12, 15, 24) is Color bg ? new SolidColorBrush(bg) : ConsoleBg,
+                BorderBrush     = Theme.BrushBorder,
+                BorderThickness = new Thickness(0, 1, 0, 0),
+                Padding         = new Thickness(6, 4, 6, 4)
+            };
+            var inputGrid = new Grid();
+            inputGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            inputGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var prompt = new TextBlock
+            {
+                Text              = "▶  ",
+                Foreground        = ConsolePrompt,
+                FontFamily        = ConsoleFont,
+                FontSize          = ConsoleFontSize,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin            = new Thickness(4, 0, 0, 0)
+            };
+            Grid.SetColumn(prompt, 0);
+
+            _consoleInput = new TextBox
+            {
+                Background      = Brushes.Transparent,
+                Foreground      = ConsoleInput,
+                CaretBrush      = ConsolePrompt,
+                FontFamily      = ConsoleFont,
+                FontSize        = ConsoleFontSize,
+                BorderThickness = new Thickness(0),
+                Padding         = new Thickness(4, 2, 4, 2),
+                Margin          = new Thickness(0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _consoleInput.KeyDown += OnConsoleKeyDown;
+            Grid.SetColumn(_consoleInput, 1);
+
+            inputGrid.Children.Add(prompt);
+            inputGrid.Children.Add(_consoleInput);
+            inputRow.Child = inputGrid;
+            DockPanel.SetDock(inputRow, Dock.Bottom);
+            outer.Children.Add(inputRow);
+
+            // Log area
+            _consoleLines = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(8, 6, 8, 4) };
+            _consoleScroll = new ScrollViewer
+            {
+                VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Background = Brushes.Transparent,
+                Content    = _consoleLines
+            };
+            outer.Children.Add(_consoleScroll);
+
+            return outer;
+        }
+
+        // ── Console input handler ──────────────────────────────────────────────
+
+        private void OnConsoleKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                string text = _consoleInput.Text.Trim();
+                _consoleInput.Clear();
+                if (string.IsNullOrEmpty(text)) return;
+
+                _inputHistory.Insert(0, text);
+                if (_inputHistory.Count > 100) _inputHistory.RemoveAt(_inputHistory.Count - 1);
+                _historyIdx = -1;
+
+                ProcessInput(text);
+            }
+            else if (e.Key == Key.Up)
+            {
+                e.Handled = true;
+                if (_inputHistory.Count == 0) return;
+                _historyIdx = Math.Min(_historyIdx + 1, _inputHistory.Count - 1);
+                _consoleInput.Text = _inputHistory[_historyIdx];
+                _consoleInput.SelectionStart = _consoleInput.Text.Length;
+            }
+            else if (e.Key == Key.Down)
+            {
+                e.Handled = true;
+                _historyIdx = Math.Max(_historyIdx - 1, -1);
+                _consoleInput.Text = _historyIdx >= 0 ? _inputHistory[_historyIdx] : "";
+                _consoleInput.SelectionStart = _consoleInput.Text.Length;
+            }
+        }
+
+        private void ProcessInput(string raw)
+        {
+            // Echo input
+            AppendLine($"▶  {raw}", ConsoleInput);
+
+            // Commands
+            if (raw.StartsWith('/'))
+            {
+                string cmd = raw.ToLowerInvariant();
+                if (cmd is "/er h" or "/er home") { CmdEndRally(homeWins: true);  return; }
+                if (cmd is "/er a" or "/er away") { CmdEndRally(homeWins: false); return; }
+                if (cmd is "/er" or "/end-rally") { AppendErr("Specify winner: /er h (home) or /er a (away)"); return; }
+                if (cmd is "/es" or "/end-set")   { CmdEndSet();   return; }
+                if (cmd is "/em" or "/end-match")  { CmdEndMatch(); return; }
+                if (cmd is "/clear") { _consoleLines.Children.Clear(); return; }
+                if (cmd is "/help")  { ShowHelp(); return; }
+                AppendErr($"Unknown command: {raw}. Type /help.");
+                return;
+            }
+
+            if (_match == null || _currentSet == null || _currentRally == null)
+            {
+                AppendErr("No match loaded.");
+                return;
+            }
+
+            // Handle compound codes (split on '.')
+            var parts = raw.Split('.');
+            foreach (var part in parts)
+            {
+                if (string.IsNullOrWhiteSpace(part)) continue;
+                ProcessToken(part.Trim());
+            }
+        }
+
+        private void ProcessToken(string code)
+        {
+            var tok = TryParseToken(code, out string err);
+            if (tok == null) { AppendErr($"  Parse error: {err}"); return; }
+
+            var players = tok.IsAway ? _awayPlayers : _homePlayers;
+            var team    = tok.IsAway ? _awayTeam    : _homeTeam;
+
+            if (team == null) { AppendErr("  Team not loaded."); return; }
+
+            if (!players.TryGetValue(tok.PlayerNum, out var player))
+            {
+                AppendErr($"  Player #{tok.PlayerNum} not found in {(tok.IsAway ? "away" : "home")} team.");
+                return;
+            }
+
+            int? zone = tok.Zone ?? (_selectedZone > 0 ? _selectedZone : (int?)null);
+
+            var action = new Models.Action
+            {
+                RallyId     = _currentRally!.Id,
+                PlayerId    = player.Id,
+                TeamId      = team.Id,
+                ActionType  = tok.Action,
+                Result      = tok.Result,
+                Zone        = zone,
+                PlayerName  = player.Name,
+                TeamName    = team.Name,
+                SetNumber   = _currentSet!.SetNumber,
+                RallyNumber = _currentRally.RallyNumber
+            };
+            action.Id = _rallyRepo.InsertAction(action);
+            RefreshHeatmap();
+
+            // Formatted confirmation line
+            string teamTag  = tok.IsAway ? "AWAY" : "HOME";
+            string subInfo  = string.IsNullOrEmpty(tok.SubType) ? "" : $"  [{tok.SubType}]";
+            string zoneInfo = zone.HasValue ? $"  Z{zone}" : "";
+            string resInfo  = ResultLabel(tok.Result);
+            AppendLine($"   ↳ {teamTag}  #{player.Number} {player.Name}  {tok.Action}{subInfo}{zoneInfo}  {resInfo}", ConsoleOk);
+        }
+
+        // ── DataVolley code parser ─────────────────────────────────────────────
+        // Format: [a?][NN][T][SUB?][Z?][R?]
+        //   team:    blank=home  a=away
+        //   NN:      1-2 digit jersey number
+        //   T:       S R A B D E F  (or implicit A for X/V/P combo codes)
+        //   SUB:     H M Q T (serve subtypes)  |  X1 X5 X6 V5 XP PP … (attack combos)
+        //   Z:       1-6  (optional zone digit)
+        //   R:       # + ! - / =
+
+        private sealed record DvToken(
+            bool IsAway, int PlayerNum, string Action, string SubType, int? Zone, string Result);
+
+        private static DvToken? TryParseToken(string raw, out string error)
+        {
+            error = "";
+            int i = 0;
+
+            // Team prefix: 'a' followed by a digit = away
+            bool isAway = false;
+            if (i < raw.Length && raw[i] == 'a' && i + 1 < raw.Length && char.IsDigit(raw[i + 1]))
+            { isAway = true; i++; }
+
+            // Player number (1-2 digits)
+            int numStart = i;
+            while (i < raw.Length && char.IsDigit(raw[i]) && i - numStart < 2) i++;
+            if (i == numStart) { error = "Missing player number"; return null; }
+            int playerNum = int.Parse(raw[numStart..i]);
+
+            if (i >= raw.Length) { error = "Missing action type after player number"; return null; }
+
+            // Action type (single letter, or implicit A for combo prefixes)
+            string action;
+            char c = char.ToUpper(raw[i]);
+            switch (c)
+            {
+                case 'S': action = "Serve";     i++; break;
+                case 'R': action = "Reception"; i++; break;
+                case 'A': action = "Attack";    i++; break;
+                case 'B': action = "Block";     i++; break;
+                case 'D': action = "Dig";       i++; break;
+                case 'E': action = "Set";       i++; break;
+                case 'F': action = "Free";      i++; break;
+                // Attack combo codes — X*, V*, P* — action is implicit Attack, don't advance
+                case 'X': case 'V': case 'P': action = "Attack"; break;
+                default:
+                    error = $"Unknown action '{raw[i]}'  (expected S R A B D E F or combo X/V/P)";
+                    return null;
+            }
+
+            // Sub-type / combo: up to 2 non-digit, non-result chars
+            int subStart = i;
+            while (i < raw.Length && i - subStart < 2
+                && !char.IsDigit(raw[i])
+                && !"#+!-/=".Contains(raw[i]))
+                i++;
+            string subType = raw[subStart..i].ToUpper();
+
+            // Zone (single digit 1-9)
+            int? zone = null;
+            if (i < raw.Length && char.IsDigit(raw[i]) && raw[i] != '0')
+            { zone = raw[i] - '0'; i++; }
+
+            // Result
+            string result = "";
+            if (i < raw.Length && "#+!-/=".Contains(raw[i]))
+                result = raw[i].ToString();
+
+            return new DvToken(isAway, playerNum, action, subType, zone, result);
+        }
+
+        // ── Match control commands ─────────────────────────────────────────────
+
+        private void CmdEndRally(bool homeWins)
+        {
+            if (_currentRally == null || _currentSet == null || _match == null) return;
+
+            if (homeWins) _currentSet.HomePoints++;
+            else          _currentSet.AwayPoints++;
+
+            _setRepo.UpdatePoints(_currentSet.Id, _currentSet.HomePoints, _currentSet.AwayPoints, false);
+            UpdateSetLabel();
+
+            ApplyRotation(homeWins);
+
+            string winner = homeWins ? _match.HomeTeamName : _match.AwayTeamName;
+            AppendRally($"── Rally {_currentRally.RallyNumber} ended  →  {winner} point  ({_currentSet.HomePoints}:{_currentSet.AwayPoints}) ──");
+            StartNewRally();
+            AppendRally($"── Rally {_currentRally?.RallyNumber} started ──");
+        }
+
+        private void CmdEndSet()
+        {
+            if (_match == null || _currentSet == null) return;
+
+            _currentSet.IsComplete = true;
+            _setRepo.UpdatePoints(_currentSet.Id, _currentSet.HomePoints, _currentSet.AwayPoints, true);
+
+            bool homeWon = _currentSet.HomePoints > _currentSet.AwayPoints;
+            if (homeWon) _match.HomeScore++; else _match.AwayScore++;
+            _matchRepo.UpdateScore(_match.Id, _match.HomeScore, _match.AwayScore, "Live");
+            _lblHomeScore.Text = _match.HomeScore.ToString();
+            _lblAwayScore.Text = _match.AwayScore.ToString();
+
+            int nextSet = _currentSet.SetNumber + 1;
+            AppendRally($"══ SET {_currentSet.SetNumber} FINISHED  {_currentSet.HomePoints}:{_currentSet.AwayPoints}  ({(homeWon ? _match.HomeTeamName : _match.AwayTeamName)} wins set) ══");
+
+            _currentSet    = new Set { MatchId = _match.Id, SetNumber = nextSet };
+            _currentSet.Id = _setRepo.Insert(_currentSet);
+            UpdateSetLabel();
+            StartNewRally();
+            AppendRally($"══ SET {nextSet} STARTED ══");
+            Dispatcher.BeginInvoke((System.Action)ShowLineupDialog);
+        }
+
+        private void CmdEndMatch()
+        {
+            if (_match == null) return;
+            _matchRepo.UpdateScore(_match.Id, _match.HomeScore, _match.AwayScore, "Finished");
+            AppendRally($"══ MATCH FINISHED  {_match.HomeTeamName} {_match.HomeScore} : {_match.AwayScore} {_match.AwayTeamName} ══");
+        }
+
+        // ── Internal helpers ───────────────────────────────────────────────────
+
+        private void StartNewRally()
+        {
+            if (_match == null || _currentSet == null) return;
+            var existing = _rallyRepo.GetActionsForMatch(_match.Id);
+            int rallyNum = existing.Count == 0 ? 1 : existing.Max(a => a.RallyNumber) + 1;
+            _currentRally    = new Rally { MatchId = _match.Id, SetId = _currentSet.Id, RallyNumber = rallyNum };
+            _currentRally.Id = _rallyRepo.InsertRally(_currentRally);
+            _selectedZone    = 0;
+            for (int i = 0; i < 6; i++) _zoneBtns[i].Background = Theme.BrushBgHover;
+        }
+
+        private void SelectZone(int zone)
+        {
+            _selectedZone = zone;
+            for (int i = 0; i < 6; i++)
+                _zoneBtns[i].Background = (i + 1 == zone)
+                    ? new SolidColorBrush(Theme.Accent)
+                    : Theme.BrushBgHover;
+            AppendSys($"  Zone {zone} pre-selected (used if no zone in code).");
+        }
+
+        private void RefreshHeatmap()
+        {
+            if (_match == null) return;
+            int teamId = _homeTeam?.Id ?? _match.HomeTeamId;
+            _heatmap.SetData(new StatsService().GetZoneData(teamId, "Attack", _match.Id));
+        }
+
+        private void UpdateSetLabel()
+        {
+            if (_currentSet != null)
+            {
+                _lblCurrentSet.Text = $"Set {_currentSet.SetNumber}  |  {_currentSet.HomePoints} : {_currentSet.AwayPoints}";
+                _lblSetScore.Text   = _match != null ? $"{_match.HomeScore} : {_match.AwayScore}" : "";
+            }
+        }
+
+        private void ShowHelp()
+        {
+            AppendSys("──── Help ────────────────────────────────────────────");
+            AppendSys("Code format:  [a]<num><action>[sub][zone][result]");
+            AppendSys("  prefix a  = away team  (none = home team)");
+            AppendSys("  num       = 1-2 digit jersey number");
+            AppendSys("  action:   S=Serve  R=Reception  A=Attack");
+            AppendSys("            B=Block  D=Dig  E=Set  F=FreeBall");
+            AppendSys("  sub-type (serve):  H=float  M=jump-float");
+            AppendSys("                     Q=jump-topspin  T=underhand");
+            AppendSys("  sub-type (attack): X1 X5 X6 XP XM XD XC");
+            AppendSys("                     V5 V6 VP  PP=setter-dump");
+            AppendSys("  zone:     1-6  (standard volleyball positions)");
+            AppendSys("  result:   #=perfect  +=positive  !=overpass");
+            AppendSys("            /=freeball -=negative  ==error");
+            AppendSys("Compound:   12SM6.17#  (serve then reception)");
+            AppendSys("Commands:   /er h|a  /es  /em  /clear  /help");
+            AppendSys("Examples:");
+            AppendSys("  12SM6#        home #12 jump-float serve  Z6  perfect");
+            AppendSys("  a17R+         away #17 reception         positive");
+            AppendSys("  04X52#        home #04 attack X5  Z2     point");
+            AppendSys("  a6X65#        away #6  attack X6  Z5     point");
+            AppendSys("  12SM56.17#    compound: serve + reception");
+            AppendSys("──────────────────────────────────────────────────────");
+        }
+
+        // ── Console append helpers ─────────────────────────────────────────────
+
+        private void AppendLine(string text, SolidColorBrush color)
+        {
+            _consoleLines.Children.Add(new TextBlock
+            {
+                Text            = text,
+                Foreground      = color,
+                FontFamily      = ConsoleFont,
+                FontSize        = ConsoleFontSize,
+                TextWrapping    = TextWrapping.Wrap,
+                Margin          = new Thickness(0, 1, 0, 1)
+            });
+            _consoleScroll.ScrollToBottom();
+        }
+
+        private void AppendOk(string text)    => AppendLine(text, ConsoleOk);
+        private void AppendErr(string text)   => AppendLine(text, ConsoleErr);
+        private void AppendSys(string text)   => AppendLine(text, ConsoleSys);
+        private void AppendRally(string text) => AppendLine(text, ConsoleRally);
+
+        private static string ResultLabel(string r) => r switch
+        {
+            "#" => "[#] PERFECT",  "+" => "[+] POSITIVE", "!" => "[!] OVERPASS",
+            "/" => "[/] FREEBALL", "-" => "[-] NEGATIVE",  "=" => "[=] ERROR",
+            _ => string.IsNullOrEmpty(r) ? "" : $"[{r}]"
+        };
+
+        private static string FormatLoadedAction(Models.Action a)
+        {
+            string zone = a.Zone.HasValue ? $"Z{a.Zone}" : "";
+            return $"S{a.SetNumber} R{a.RallyNumber}  {a.PlayerName}  {a.ActionType}  {a.Result}  {zone}";
+        }
+
+        // ── Button factories ───────────────────────────────────────────────────
+
+        private static Button MakeZoneButton(string text)
+        {
+            var b = new Button
+            {
+                Content         = text,
+                Background      = Theme.BrushBgHover,
+                Foreground      = Theme.BrushTextPrimary,
+                FontFamily      = Theme.FontFamily,
+                FontSize        = Theme.SizeH3,
+                BorderBrush     = Theme.BrushBorder,
+                BorderThickness = new Thickness(1),
+                Margin          = new Thickness(2),
+                Style           = (Style)Application.Current.Resources["FlatButton"]
+            };
+            return b;
+        }
+
+        private static Button MakeCtrlButton(string text, Color bg)
+        {
+            var b = new Button
+            {
+                Content         = text,
+                Height          = 30,
+                Background      = new SolidColorBrush(bg),
+                Foreground      = Brushes.White,
+                FontFamily      = Theme.FontFamily,
+                FontSize        = Theme.SizeBody,
+                Style           = (Style)Application.Current.Resources["FlatButton"]
+            };
+            return b;
+        }
+    }
+}

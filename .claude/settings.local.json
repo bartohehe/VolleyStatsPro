@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /E/Projekty/VolleyStatsPro -type f -name *.cs)",
+      "Bash(wc -l /E/Projekty/VolleyStatsPro/**/*.cs)",
+      "Bash(du -sh /E/Projekty/VolleyStatsPro/*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(dotnet build:*)",
+      "Bash(pip install:*)",
+      "Bash(python -c \":*)",
+      "Bash(python:*)",
+      "Bash(grep -E '\\\\.\\(cs|xaml\\)$')",
+      "Read(//c/Users/barto/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.0.1/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(python3 scripts/search.py \"volleyball sports statistics desktop dashboard analytics dark\" --design-system -p \"VolleyStatsPro\" -f markdown)",
+      "Bash(py:*)",
+      "Bash(where python:*)",
+      "Bash(where python3:*)",
+      "Bash(where py:*)"
+    ]
+  }
+}

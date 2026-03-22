@@ -1,0 +1,51 @@
+<Window x:Class="VolleyStatsPro.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:svgc="clr-namespace:SharpVectors.Converters;assembly=SharpVectors.Converters.Wpf"
+        Title="VolleyStats Pro"
+        Width="1400" Height="860"
+        MinWidth="1100" MinHeight="700"
+        WindowStartupLocation="CenterScreen"
+        Background="#0D111B">
+    <DockPanel>
+        <!-- Top header -->
+        <Border x:Name="TopHeader" DockPanel.Dock="Top" Height="54" Background="#0A0E16">
+            <Border.Effect>
+                <DropShadowEffect ShadowDepth="0" BlurRadius="1" Color="#28374F" Opacity="1"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="220"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Logo -->
+                <svgc:SvgViewbox Source="pack://application:,,,/Assets/logo.svg"
+                                 Height="38" Width="190"
+                                 VerticalAlignment="Center"
+                                 Margin="14,0,0,0"/>
+                <!-- Season info -->
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,150,0">
+                    <TextBlock x:Name="LblSeason" Text="Season 2025-26" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Foreground="#F0F5FF"/>
+                    <TextBlock x:Name="LblRecord" Text="0-0 Record" FontFamily="Segoe UI" FontSize="8.75" Foreground="#8296B9"/>
+                </StackPanel>
+                <!-- Start Match button -->
+                <Button x:Name="BtnStartMatch" Grid.Column="2" Content="▶  Start Match"
+                        Width="130" Height="32" Margin="0,0,10,0"
+                        VerticalAlignment="Center" HorizontalAlignment="Right"
+                        Background="#00BC8C" Foreground="White"
+                        FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
+                        Style="{StaticResource FlatButton}"
+                        Click="BtnStartMatch_Click"/>
+            </Grid>
+        </Border>
+        <!-- Nav bar -->
+        <Border DockPanel.Dock="Top" Height="52" Background="#0A0E16">
+            <Border.BorderBrush><SolidColorBrush Color="#28374F"/></Border.BorderBrush>
+            <Border.BorderThickness>0,0,0,1</Border.BorderThickness>
+            <StackPanel x:Name="NavBar" Orientation="Horizontal" Margin="16,4,0,0"/>
+        </Border>
+        <!-- Content -->
+        <Grid x:Name="ContentGrid" Background="#0D111B"/>
+    </DockPanel>
+</Window>

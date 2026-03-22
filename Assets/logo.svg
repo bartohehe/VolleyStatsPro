@@ -1,0 +1,27 @@
+<svg width="100%" viewBox="0 0 680 220" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    
+  <mask id="imagine-text-gaps-c9zcn0" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="680" height="220" fill="white"/><rect x="162.9358367919922" y="30.534954071044922" width="177.36700439453125" height="75.29922485351562" fill="black" rx="2"/><rect x="168" y="104.49746704101562" width="189.4073028564453" height="55.080039978027344" fill="black" rx="2"/><rect x="466" y="133.22999572753906" width="47.3409423828125" height="19.962512969970703" fill="black" rx="2"/></mask></defs>
+
+  <!-- Net -->
+  <line x1="52" y1="86" x2="52" y2="150" stroke-width="1.5" stroke-linecap="round" style="fill:rgb(0, 0, 0);stroke:rgb(68, 68, 65);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="52" y1="86" x2="144" y2="86" stroke-width="2.5" stroke-linecap="round" style="fill:rgb(0, 0, 0);stroke:rgb(68, 68, 65);color:rgb(255, 255, 255);stroke-width:2.5px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="144" y1="86" x2="144" y2="150" stroke-width="1.5" stroke-linecap="round" style="fill:rgb(0, 0, 0);stroke:rgb(68, 68, 65);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Ball -->
+  <circle cx="98" cy="52" r="28" stroke-width="2" style="fill:none;stroke:rgb(93, 202, 165);color:rgb(255, 255, 255);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <path d="M70 52 Q98 44 126 52" fill="none" stroke-width="1.5" style="fill:none;stroke:rgb(8, 80, 65);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <path d="M70 55 Q98 63 126 55" fill="none" stroke-width="1.5" style="fill:none;stroke:rgb(8, 80, 65);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <path d="M84 25 Q74 52 84 79" fill="none" stroke-width="1.5" style="fill:none;stroke:rgb(8, 80, 65);color:rgb(255, 255, 255);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Wordmark -->
+  <text x="168" y="90" font-family="'Helvetica Neue', 'Arial', sans-serif" font-size="64" font-weight="700" letter-spacing="-3" style="fill:rgb(225, 245, 238);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Helvetica Neue&quot;, Arial, sans-serif;font-size:64px;font-weight:700;text-anchor:start;dominant-baseline:auto">Volley</text>
+
+  <text x="172" y="148" font-family="'Helvetica Neue', 'Arial', sans-serif" font-size="46" font-weight="300" letter-spacing="8" style="fill:rgb(93, 202, 165);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Helvetica Neue&quot;, Arial, sans-serif;font-size:46px;font-weight:300;text-anchor:start;dominant-baseline:auto">STATS</text>
+
+  <!-- PRO — moved closer to STATS -->
+  <text x="470" y="148" font-family="'Helvetica Neue', 'Arial', sans-serif" font-size="14" font-weight="700" letter-spacing="3" style="fill:rgb(93, 202, 165);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Helvetica Neue&quot;, Arial, sans-serif;font-size:14px;font-weight:700;text-anchor:start;dominant-baseline:auto">PRO</text>
+
+  <!-- Divider -->
+  <line x1="168" y1="101" x2="630" y2="101" stroke-width="1" mask="url(#imagine-text-gaps-c9zcn0)" style="fill:rgb(0, 0, 0);stroke:rgb(44, 44, 42);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</svg>
