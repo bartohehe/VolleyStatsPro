@@ -6,7 +6,8 @@ namespace VolleyStatsPro
     {
         protected override void OnStartup(StartupEventArgs e)
         {
-            VolleyStatsPro.Data.Database.Initialize();
+            Helpers.Loc.Init(Helpers.SettingsManager.Current.Language);
+            Data.Database.Initialize();
             base.OnStartup(e);
         }
     }

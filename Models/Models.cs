@@ -127,4 +127,14 @@ namespace VolleyStatsPro.Models
         public int Success { get; set; }
         public int Error { get; set; }
     }
+
+    public class MatchReport
+    {
+        public Match Match { get; set; } = new();
+        public List<Set> Sets { get; set; } = new();
+        public PlayerStats HomeAggregate { get; set; } = new();
+        public PlayerStats AwayAggregate { get; set; } = new();
+        public List<PlayerStats> HomePlayers { get; set; } = new();
+        public List<PlayerStats> AwayPlayers { get; set; } = new();
+    }
 }

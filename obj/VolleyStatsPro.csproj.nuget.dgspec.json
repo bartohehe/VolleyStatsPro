@@ -54,6 +54,10 @@
               "target": "Package",
               "version": "[8.0.0, )"
             },
+            "QuestPDF": {
+              "target": "Package",
+              "version": "[2026.2.4, )"
+            },
             "SharpVectors.Reloaded": {
               "target": "Package",
               "version": "[1.8.5, )"

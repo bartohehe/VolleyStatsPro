@@ -1,16 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using Microsoft.Data.Sqlite;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+using VolleyStatsPro.Helpers;
 using VolleyStatsPro.Models;
 
 namespace VolleyStatsPro.Data
 {
     public static class Database
     {
-        private static string DbPath => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "VolleyStatsPro", "volleystats.db");
+        private static string DbPath => SettingsManager.Current.DatabasePath;
 
         public static SqliteConnection GetConnection()
         {
@@ -627,6 +630,261 @@ namespace VolleyStatsPro.Data
                 }
             }
             return s;
+        }
+
+        public MatchReport GetMatchReport(int matchId)
+        {
+            var matchRepo = new MatchRepository();
+            var setRepo = new SetRepository();
+            var playerRepo = new PlayerRepository();
+
+            var match = matchRepo.GetById(matchId)
+                ?? throw new InvalidOperationException($"Match {matchId} not found.");
+
+            var sets = setRepo.GetByMatch(matchId);
+            var allActions = _rallyRepo.GetActionsForMatch(matchId);
+
+            var homeActions = allActions.FindAll(a => a.TeamId == match.HomeTeamId);
+            var homeAggregate = ComputeStats(homeActions, 0);
+            homeAggregate.PlayerName = match.HomeTeamName;
+
+            var awayActions = allActions.FindAll(a => a.TeamId == match.AwayTeamId);
+            var awayAggregate = ComputeStats(awayActions, 0);
+            awayAggregate.PlayerName = match.AwayTeamName;
+
+            var homePlayers = new List<PlayerStats>();
+            foreach (var p in playerRepo.GetByTeam(match.HomeTeamId))
+            {
+                var pa = allActions.FindAll(a => a.PlayerId == p.Id);
+                if (pa.Count == 0) continue;
+                var ps = ComputeStats(pa, p.Id);
+                ps.PlayerName = p.Name; ps.Position = p.Position; ps.Number = p.Number;
+                homePlayers.Add(ps);
+            }
+
+            var awayPlayers = new List<PlayerStats>();
+            foreach (var p in playerRepo.GetByTeam(match.AwayTeamId))
+            {
+                var pa = allActions.FindAll(a => a.PlayerId == p.Id);
+                if (pa.Count == 0) continue;
+                var ps = ComputeStats(pa, p.Id);
+                ps.PlayerName = p.Name; ps.Position = p.Position; ps.Number = p.Number;
+                awayPlayers.Add(ps);
+            }
+
+            return new MatchReport
+            {
+                Match = match,
+                Sets = sets,
+                HomeAggregate = homeAggregate,
+                AwayAggregate = awayAggregate,
+                HomePlayers = homePlayers,
+                AwayPlayers = awayPlayers
+            };
+        }
+
+        public static void ExportMatchReportToCsv(MatchReport report, string path)
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine("MATCH REPORT");
+            sb.AppendLine($"Match,{report.Match.HomeTeamName} vs {report.Match.AwayTeamName}");
+            sb.AppendLine($"Date,{report.Match.Date:yyyy-MM-dd}");
+            sb.AppendLine($"Location,{report.Match.Location}");
+            sb.AppendLine($"Result,{report.Match.HomeScore} - {report.Match.AwayScore}");
+            sb.AppendLine();
+
+            sb.AppendLine("SET SCORES");
+            sb.AppendLine("Set,Home,Away");
+            foreach (var s in report.Sets)
+                sb.AppendLine($"{s.SetNumber},{s.HomePoints},{s.AwayPoints}");
+            sb.AppendLine();
+
+            const string statsHeader =
+                "Player,#,Position," +
+                "Serves,Aces,Srv Err,Srv Eff%," +
+                "Attacks,Kills,Att Err,Att Eff%," +
+                "Blocks,Blk Kill,Blk Err," +
+                "Receptions,Perfect,Rec Err,Rec Eff%," +
+                "Digs,Dig Err,Sets,Set Err";
+
+            sb.AppendLine($"HOME TEAM: {report.Match.HomeTeamName}");
+            sb.AppendLine(statsHeader);
+            AppendPlayerRow(sb, report.HomeAggregate, "TEAM TOTAL");
+            foreach (var ps in report.HomePlayers) AppendPlayerRow(sb, ps, ps.PlayerName);
+            sb.AppendLine();
+
+            sb.AppendLine($"AWAY TEAM: {report.Match.AwayTeamName}");
+            sb.AppendLine(statsHeader);
+            AppendPlayerRow(sb, report.AwayAggregate, "TEAM TOTAL");
+            foreach (var ps in report.AwayPlayers) AppendPlayerRow(sb, ps, ps.PlayerName);
+
+            File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+        }
+
+        public static void ExportMatchReportToPdf(MatchReport report, string path)
+        {
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            var m = report.Match;
+            var setLine = string.Join("  |  ", report.Sets.ConvertAll(
+                s => $"Set {s.SetNumber}: {s.HomePoints}–{s.AwayPoints}"));
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(30);
+                    page.DefaultTextStyle(t => t.FontSize(9).FontFamily("Segoe UI"));
+
+                    page.Header().Column(col =>
+                    {
+                        col.Item().Row(row =>
+                        {
+                            row.RelativeItem().Text($"{m.HomeTeamName}  vs  {m.AwayTeamName}")
+                                .FontSize(18).Bold();
+                            row.ConstantItem(200).AlignRight().Text(
+                                $"{m.Date:yyyy-MM-dd}  ·  {m.Location}").FontSize(9)
+                                .FontColor(Colors.Grey.Medium);
+                        });
+                        col.Item().PaddingTop(2).Row(row =>
+                        {
+                            row.RelativeItem().Text(
+                                $"Final: {m.HomeScore} – {m.AwayScore}  ({m.Status})")
+                                .FontSize(11).Bold().FontColor(Colors.Teal.Darken2);
+                            row.RelativeItem().AlignRight().Text(setLine)
+                                .FontSize(9).FontColor(Colors.Grey.Darken2);
+                        });
+                        col.Item().PaddingTop(4).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
+                    });
+
+                    page.Content().PaddingTop(12).Column(col =>
+                    {
+                        col.Item().Text($"HOME  —  {m.HomeTeamName}")
+                            .FontSize(11).Bold().FontColor(Colors.Teal.Darken3);
+                        col.Item().PaddingTop(4).Element(c =>
+                            BuildStatsTable(c, report.HomeAggregate, report.HomePlayers));
+
+                        col.Item().PaddingTop(16).Text($"AWAY  —  {m.AwayTeamName}")
+                            .FontSize(11).Bold().FontColor(Colors.Blue.Darken3);
+                        col.Item().PaddingTop(4).Element(c =>
+                            BuildStatsTable(c, report.AwayAggregate, report.AwayPlayers));
+                    });
+
+                    page.Footer().AlignCenter().Text(t =>
+                    {
+                        t.Span("VolleyStatsPro  ·  Generated ").FontColor(Colors.Grey.Medium);
+                        t.Span(DateTime.Now.ToString("yyyy-MM-dd HH:mm")).FontColor(Colors.Grey.Medium);
+                    });
+                });
+            }).GeneratePdf(path);
+        }
+
+        private static void BuildStatsTable(IContainer container, PlayerStats aggregate, List<PlayerStats> players)
+        {
+            container.Table(table =>
+            {
+                // Column definitions
+                table.ColumnsDefinition(c =>
+                {
+                    c.RelativeColumn(3);   // name
+                    c.ConstantColumn(22);  // #
+                    c.RelativeColumn(2);   // pos
+                    c.ConstantColumn(30);  // srv tot
+                    c.ConstantColumn(28);  // aces
+                    c.ConstantColumn(28);  // srv err
+                    c.ConstantColumn(38);  // srv eff
+                    c.ConstantColumn(30);  // att tot
+                    c.ConstantColumn(28);  // kills
+                    c.ConstantColumn(28);  // att err
+                    c.ConstantColumn(38);  // att eff
+                    c.ConstantColumn(30);  // blk tot
+                    c.ConstantColumn(28);  // blk kill
+                    c.ConstantColumn(28);  // blk err
+                    c.ConstantColumn(30);  // rec tot
+                    c.ConstantColumn(28);  // perfect
+                    c.ConstantColumn(28);  // rec err
+                    c.ConstantColumn(38);  // rec eff
+                    c.ConstantColumn(28);  // dig tot
+                    c.ConstantColumn(28);  // dig err
+                    c.ConstantColumn(28);  // set tot
+                    c.ConstantColumn(28);  // set err
+                });
+
+                // Header row
+                table.Header(header =>
+                {
+                    void H(string text) =>
+                        header.Cell().Background(Colors.Grey.Darken3).Padding(3)
+                            .AlignCenter().Text(text).FontSize(7).Bold().FontColor(Colors.White);
+
+                    H("Player"); H("#"); H("Pos");
+                    H("Srv"); H("Ace"); H("SEr"); H("SEff");
+                    H("Att"); H("Kill"); H("AEr"); H("AEff");
+                    H("Blk"); H("BKl"); H("BEr");
+                    H("Rec"); H("Prf"); H("REr"); H("REff");
+                    H("Dig"); H("DEr"); H("Set"); H("SetEr");
+                });
+
+                // Total row
+                AddStatsRow(table, aggregate, "TEAM TOTAL", aggregate.PlayerName, isTotal: true);
+
+                // Player rows
+                for (int i = 0; i < players.Count; i++)
+                    AddStatsRow(table, players[i], players[i].PlayerName,
+                        players[i].Position, isTotal: false, oddRow: i % 2 == 0);
+            });
+        }
+
+        private static void AddStatsRow(
+            TableDescriptor table, PlayerStats ps, string name, string pos,
+            bool isTotal = false, bool oddRow = false)
+        {
+            var bg = isTotal ? Colors.Teal.Lighten4
+                     : oddRow ? Colors.Grey.Lighten4 : Colors.White;
+
+            void Cell(string val, bool alignLeft = false)
+            {
+                var inner = table.Cell().Background(bg).Padding(3);
+                var aligned = alignLeft ? inner.AlignLeft() : inner.AlignCenter();
+                var txt = aligned.Text(val).FontSize(8);
+                if (isTotal) txt.Bold();
+            }
+
+            Cell(name, alignLeft: true);
+            Cell(isTotal ? "" : ps.Number.ToString());
+            Cell(pos);
+            Cell(ps.ServeTotal.ToString());
+            Cell(ps.ServeAce.ToString());
+            Cell(ps.ServeError.ToString());
+            Cell($"{ps.ServeEff:P0}");
+            Cell(ps.AttackTotal.ToString());
+            Cell(ps.AttackKill.ToString());
+            Cell(ps.AttackError.ToString());
+            Cell($"{ps.AttackEff:P0}");
+            Cell(ps.BlockTotal.ToString());
+            Cell(ps.BlockKill.ToString());
+            Cell(ps.BlockError.ToString());
+            Cell(ps.ReceptionTotal.ToString());
+            Cell(ps.ReceptionPerfect.ToString());
+            Cell(ps.ReceptionError.ToString());
+            Cell($"{ps.ReceptionEff:P0}");
+            Cell(ps.DigTotal.ToString());
+            Cell(ps.DigError.ToString());
+            Cell(ps.SetTotal.ToString());
+            Cell(ps.SetError.ToString());
+        }
+
+        private static void AppendPlayerRow(StringBuilder sb, PlayerStats ps, string name)
+        {
+            sb.AppendLine(
+                $"{name},{ps.Number},{ps.Position}," +
+                $"{ps.ServeTotal},{ps.ServeAce},{ps.ServeError},{ps.ServeEff:P0}," +
+                $"{ps.AttackTotal},{ps.AttackKill},{ps.AttackError},{ps.AttackEff:P0}," +
+                $"{ps.BlockTotal},{ps.BlockKill},{ps.BlockError}," +
+                $"{ps.ReceptionTotal},{ps.ReceptionPerfect},{ps.ReceptionError},{ps.ReceptionEff:P0}," +
+                $"{ps.DigTotal},{ps.DigError},{ps.SetTotal},{ps.SetError}");
         }
 
         private static bool IsSuccess(string type, string result) =>

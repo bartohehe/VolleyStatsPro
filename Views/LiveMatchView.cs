@@ -39,8 +39,11 @@ namespace VolleyStatsPro.Views
         private StackPanel          _consoleLines  = null!;
         private ScrollViewer        _consoleScroll = null!;
         private TextBox             _consoleInput  = null!;
-        private Button[]            _zoneBtns      = new Button[6];
+
         private CourtHeatmapControl _heatmap       = null!;
+        private string              _heatmapAction = "Attack";
+        private Button              _btnTabAttack  = null!;
+        private Button              _btnTabServe   = null!;
 
         // ── Rotation state ─────────────────────────────────────────────────────
         // _homeRotation[i] = jersey# of player at position (i+1); i=0 is pos-1 (server)
@@ -101,6 +104,8 @@ namespace VolleyStatsPro.Views
 
             _homeTeam = new TeamRepository().GetById(_match.HomeTeamId);
             _awayTeam = new TeamRepository().GetById(_match.AwayTeamId);
+            _heatmap.HomeLabel = _homeTeam?.Name ?? "";
+            _heatmap.AwayLabel = _awayTeam?.Name ?? "";
 
             _homePlayers = _playerRepo.GetByTeam(_match.HomeTeamId)
                                       .ToDictionary(p => p.Number, p => p);
@@ -198,7 +203,7 @@ namespace VolleyStatsPro.Views
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var titles = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 0, 20, 0) };
-            _lblMatchTitle = new TextBlock { Text = "No Match Loaded", Foreground = Theme.BrushTextPrimary, FontFamily = Theme.FontFamily, FontSize = Theme.SizeH2, FontWeight = FontWeights.SemiBold };
+            _lblMatchTitle = new TextBlock { Text = Loc.Get("live.nomatch"), Foreground = Theme.BrushTextPrimary, FontFamily = Theme.FontFamily, FontSize = Theme.SizeH2, FontWeight = FontWeights.SemiBold };
             _lblCurrentSet = new TextBlock { Text = "Set 1", Foreground = Theme.BrushTextSecond, FontFamily = Theme.FontFamily, FontSize = Theme.SizeH3 };
             titles.Children.Add(_lblMatchTitle);
             titles.Children.Add(_lblCurrentSet);
@@ -228,7 +233,7 @@ namespace VolleyStatsPro.Views
             });
             backContent.Children.Add(new TextBlock
             {
-                Text              = "Matches",
+                Text              = Loc.Get("live.back"),
                 FontFamily        = Theme.FontFamily,
                 FontSize          = Theme.SizeBody,
                 VerticalAlignment = VerticalAlignment.Center
@@ -264,28 +269,20 @@ namespace VolleyStatsPro.Views
             };
             var sp = new StackPanel { Orientation = Orientation.Vertical };
 
+            // Heatmap tab strip
+            var tabStrip = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+            _btnTabAttack = new Button { Content = Loc.Get("live.tab.attack"), Style = (Style)Application.Current.Resources["NavButton"], Height = 32, Padding = new Thickness(14, 0, 14, 0) };
+            _btnTabServe  = new Button { Content = Loc.Get("live.tab.serve"),  Style = (Style)Application.Current.Resources["NavButton"], Height = 32, Padding = new Thickness(14, 0, 14, 0) };
+            _btnTabAttack.Click += (_, _) => { _heatmapAction = "Attack"; SetActiveHeatmapTab(_btnTabAttack); RefreshHeatmap(); };
+            _btnTabServe.Click  += (_, _) => { _heatmapAction = "Serve";  SetActiveHeatmapTab(_btnTabServe);  RefreshHeatmap(); };
+            tabStrip.Children.Add(_btnTabAttack);
+            tabStrip.Children.Add(_btnTabServe);
+            sp.Children.Add(tabStrip);
+            SetActiveHeatmapTab(_btnTabAttack);
+
             // Heatmap at top, bigger
-            _heatmap = new CourtHeatmapControl { Title = "Live Heatmap", Height = 320, Margin = new Thickness(8, 10, 8, 4) };
+            _heatmap = new CourtHeatmapControl { Title = Loc.Get("live.heatmap"), Height = 320, Margin = new Thickness(8, 4, 8, 4) };
             sp.Children.Add(_heatmap);
-
-            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 6, 0, 6) });
-
-            // Zone label
-            sp.Children.Add(new TextBlock { Text = "Zone (click to pre-select)", Foreground = Theme.BrushTextSecond, FontFamily = Theme.FontFamily, FontSize = Theme.SizeSmall, Margin = new Thickness(10, 0, 0, 4) });
-
-            // Zone grid 2×3  (standard 6-zone layout: row1=4,3,2  row2=5,6,1)
-            var zg = new UniformGrid { Rows = 2, Columns = 3, Height = 100, Margin = new Thickness(8, 0, 8, 4) };
-            int[] zoneLayout = { 4, 3, 2, 5, 6, 1 };
-            for (int i = 0; i < 6; i++)
-            {
-                int z   = zoneLayout[i];
-                var btn = MakeZoneButton(z.ToString());
-                int captZ = z;
-                btn.Click += (_, _) => SelectZone(captZ);
-                _zoneBtns[z - 1] = btn;
-                zg.Children.Add(btn);
-            }
-            sp.Children.Add(zg);
 
             sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 6, 0, 6) });
 
@@ -295,11 +292,11 @@ namespace VolleyStatsPro.Views
             rallyRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
             rallyRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            var btnHomePoint = MakeCtrlButton("HOME pt (/er h)", Theme.AccentBlue);
+            var btnHomePoint = MakeCtrlButton(Loc.Get("live.homept"), Theme.AccentBlue);
             btnHomePoint.Click += (_, _) => CmdEndRally(homeWins: true);
             Grid.SetColumn(btnHomePoint, 0);
 
-            var btnAwayPoint = MakeCtrlButton("AWAY pt (/er a)", Color.FromRgb(80, 80, 180));
+            var btnAwayPoint = MakeCtrlButton(Loc.Get("live.awaypt"), Color.FromRgb(80, 80, 180));
             btnAwayPoint.Click += (_, _) => CmdEndRally(homeWins: false);
             Grid.SetColumn(btnAwayPoint, 2);
 
@@ -307,9 +304,9 @@ namespace VolleyStatsPro.Views
             rallyRow.Children.Add(btnAwayPoint);
             sp.Children.Add(rallyRow);
 
-            var btnEndSet = MakeCtrlButton("End Set (/es)", Theme.Warning);
+            var btnEndSet = MakeCtrlButton(Loc.Get("live.endset"), Theme.Warning);
             btnEndSet.Margin = new Thickness(8, 3, 8, 3);
-            var btnEndMatch = MakeCtrlButton("End Match (/em)", Theme.Danger);
+            var btnEndMatch = MakeCtrlButton(Loc.Get("live.endmatch"), Theme.Danger);
             btnEndMatch.Margin = new Thickness(8, 3, 8, 3);
 
             btnEndSet.Click   += (_, _) => CmdEndSet();
@@ -347,7 +344,7 @@ namespace VolleyStatsPro.Views
             var homeStack = new DockPanel();
             var homeLbl = new TextBlock
             {
-                Text       = "HOME",
+                Text       = Loc.Get("live.home"),
                 Foreground = Theme.BrushAccent,
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeSmall,
@@ -370,7 +367,7 @@ namespace VolleyStatsPro.Views
             };
             centerStack.Children.Add(new TextBlock
             {
-                Text       = "ROTATION",
+                Text       = Loc.Get("live.rotation"),
                 Foreground = Theme.BrushTextSecond,
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeSmall,
@@ -390,7 +387,7 @@ namespace VolleyStatsPro.Views
             centerStack.Children.Add(_lblServingInd);
             var btnSetLineup = new Button
             {
-                Content    = "Set Lineup",
+                Content    = Loc.Get("live.setlineup"),
                 Height     = 26,
                 Background = Theme.BrushBgHover,
                 Foreground = Theme.BrushTextSecond,
@@ -406,7 +403,7 @@ namespace VolleyStatsPro.Views
             var awayStack = new DockPanel();
             var awayLbl = new TextBlock
             {
-                Text       = "AWAY",
+                Text       = Loc.Get("live.away"),
                 Foreground = Theme.BrushAccentBlue,
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeSmall,
@@ -555,7 +552,7 @@ namespace VolleyStatsPro.Views
 
             var dlg = new Window
             {
-                Title                   = $"Set Lineup — Set {_currentSet?.SetNumber}",
+                Title                   = string.Format(Loc.Get("live.setlineup.dlg"), _currentSet?.SetNumber),
                 Width                   = 520,
                 Height                  = 370,
                 ResizeMode              = ResizeMode.NoResize,
@@ -574,12 +571,12 @@ namespace VolleyStatsPro.Views
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Margin              = new Thickness(0, 10, 0, 0)
             };
-            var btnCancel = new Button { Content = "Cancel", Width = 80, Height = 28, Margin = new Thickness(0,0,8,0),
+            var btnCancel = new Button { Content = Loc.Get("common.cancel"), Width = 80, Height = 28, Margin = new Thickness(0,0,8,0),
                 Background = Theme.BrushBgHover, Foreground = Theme.BrushTextSecond, FontFamily = Theme.FontFamily,
                 Style = (Style)Application.Current.Resources["FlatButton"] };
             btnCancel.Click += (_, _) => dlg.Close();
 
-            var btnSave = new Button { Content = "Save Lineup", Width = 100, Height = 28,
+            var btnSave = new Button { Content = Loc.Get("live.savelineup"), Width = 100, Height = 28,
                 Background = new SolidColorBrush(Theme.Accent), Foreground = Brushes.White,
                 FontFamily = Theme.FontFamily,
                 Style = (Style)Application.Current.Resources["FlatButton"] };
@@ -687,6 +684,7 @@ namespace VolleyStatsPro.Views
             root.Children.Add(cols);
 
             dlg.Content = root;
+            Theme.ApplyDialogChrome(dlg, dlg.Title);
             bool saved = dlg.ShowDialog() == true;
             if (saved)
                 Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render,
@@ -817,7 +815,7 @@ namespace VolleyStatsPro.Views
             };
             _drawerHomeHdr = new TextBlock
             {
-                Text       = "HOME",
+                Text       = Loc.Get("live.home"),
                 Foreground = Theme.BrushAccent,
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeSmall,
@@ -839,7 +837,7 @@ namespace VolleyStatsPro.Views
             };
             _drawerAwayHdr = new TextBlock
             {
-                Text       = "AWAY",
+                Text       = Loc.Get("live.away"),
                 Foreground = Theme.BrushAccentBlue,
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeSmall,
@@ -1171,8 +1169,8 @@ namespace VolleyStatsPro.Views
             Row("/er a", "Away wins rally",  ConsoleRally);
             Row("/es", "End set",    ConsoleRally);
             Row("/em", "End match",  ConsoleErr);
-            Row("/cl", "Clear log");
-            Row("/h",  "Help");
+            Row("/clear", "Clear log");
+            Row("/help",  "Help");
 
             Section("EXAMPLE");
             sp.Children.Add(new TextBlock
@@ -1432,17 +1430,32 @@ namespace VolleyStatsPro.Views
                 case 'F': action = "Free";      i++; break;
                 // Attack combo codes — X*, V*, P* — action is implicit Attack, don't advance
                 case 'X': case 'V': case 'P': action = "Attack"; break;
+                // Result char with no action letter — imply Reception (e.g. "7#" shorthand)
+                case '#': case '+': case '!': case '-': case '/': case '=':
+                    action = "Reception"; break;   // don't advance i; result parser handles it
                 default:
                     error = $"Unknown action '{raw[i]}'  (expected S R A B D E F or combo X/V/P)";
                     return null;
             }
 
-            // Sub-type / combo: up to 2 non-digit, non-result chars
+            // Sub-type / combo: 0-2 chars.
+            // First char must be a letter (non-digit, non-result).
+            // Second char may be a letter OR a digit, but only if another digit follows
+            // (so the second digit is the subtype suffix, not the zone).
+            // Examples: "X6 5 #" → subType="X6" zone=5; "Q 6 #" → subType="Q" zone=6
             int subStart = i;
-            while (i < raw.Length && i - subStart < 2
-                && !char.IsDigit(raw[i])
-                && !"#+!-/=".Contains(raw[i]))
-                i++;
+            if (i < raw.Length && !char.IsDigit(raw[i]) && !"#+!-/=".Contains(raw[i]))
+            {
+                i++; // first letter
+                if (i < raw.Length && !"#+!-/=".Contains(raw[i]))
+                {
+                    bool isDigit = char.IsDigit(raw[i]);
+                    // Include digit only if another digit comes after it (that digit will be the zone)
+                    bool nextIsDigit = isDigit && i + 1 < raw.Length && char.IsDigit(raw[i + 1]);
+                    if (!isDigit || nextIsDigit)
+                        i++; // second char (letter, or digit with zone following)
+                }
+            }
             string subType = raw[subStart..i].ToUpper();
 
             // Zone (single digit 1-9)
@@ -1517,17 +1530,6 @@ namespace VolleyStatsPro.Views
             _currentRally    = new Rally { MatchId = _match.Id, SetId = _currentSet.Id, RallyNumber = rallyNum };
             _currentRally.Id = _rallyRepo.InsertRally(_currentRally);
             _selectedZone    = 0;
-            for (int i = 0; i < 6; i++) _zoneBtns[i].Background = Theme.BrushBgHover;
-        }
-
-        private void SelectZone(int zone)
-        {
-            _selectedZone = zone;
-            for (int i = 0; i < 6; i++)
-                _zoneBtns[i].Background = (i + 1 == zone)
-                    ? new SolidColorBrush(Theme.Accent)
-                    : Theme.BrushBgHover;
-            AppendSys($"  Zone {zone} pre-selected (used if no zone in code).");
         }
 
         private void RefreshHeatmap()
@@ -1536,10 +1538,25 @@ namespace VolleyStatsPro.Views
             var svc    = new StatsService();
             int homeId = _homeTeam?.Id ?? _match.HomeTeamId;
             int awayId = _awayTeam?.Id ?? _match.AwayTeamId;
+            _heatmap.HomeLabel = _homeTeam?.Name ?? "";
+            _heatmap.AwayLabel = _awayTeam?.Name ?? "";
             _heatmap.SetData(
-                svc.GetZoneData(homeId, "Attack", _match.Id),
+                svc.GetZoneData(homeId, _heatmapAction, _match.Id),
                 null,
-                svc.GetZoneData(awayId, "Attack", _match.Id));
+                svc.GetZoneData(awayId, _heatmapAction, _match.Id));
+        }
+
+        private void SetActiveHeatmapTab(Button btn)
+        {
+            foreach (var b in new[] { _btnTabAttack, _btnTabServe })
+            {
+                b.Foreground  = Theme.BrushTextSecond;
+                b.Background  = Brushes.Transparent;
+                b.BorderBrush = Brushes.Transparent;
+            }
+            btn.Foreground  = Theme.BrushNavActive;
+            btn.Background  = new SolidColorBrush(Color.FromArgb(30, 0, 188, 140));
+            btn.BorderBrush = Theme.BrushNavActive;
         }
 
         private void UpdateSetLabel()

@@ -5,10 +5,22 @@
         Title="VolleyStats Pro"
         Width="1400" Height="860"
         MinWidth="1100" MinHeight="700"
+        WindowStyle="None"
+        ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
-        Background="#0D111B">
+        Background="#0D111B"
+        StateChanged="Window_StateChanged">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="54"
+                      ResizeBorderThickness="5"
+                      GlassFrameThickness="0"
+                      UseAeroCaptionButtons="False"
+                      CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+
     <DockPanel>
-        <!-- Top header -->
+        <!-- Custom title bar / top header (draggable via WindowChrome CaptionHeight=54) -->
         <Border x:Name="TopHeader" DockPanel.Dock="Top" Height="54" Background="#0A0E16">
             <Border.Effect>
                 <DropShadowEffect ShadowDepth="0" BlurRadius="1" Color="#28374F" Opacity="1"/>
@@ -19,32 +31,77 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <!-- Logo -->
+
+                <!-- Logo (non-draggable hit-test needed for the SVG) -->
                 <svgc:SvgViewbox Source="pack://application:,,,/Assets/logo.svg"
                                  Height="38" Width="190"
                                  VerticalAlignment="Center"
-                                 Margin="14,0,0,0"/>
-                <!-- Season info -->
-                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,150,0">
-                    <TextBlock x:Name="LblSeason" Text="Season 2025-26" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Foreground="#F0F5FF"/>
-                    <TextBlock x:Name="LblRecord" Text="0-0 Record" FontFamily="Segoe UI" FontSize="8.75" Foreground="#8296B9"/>
+                                 Margin="14,0,0,0"
+                                 WindowChrome.IsHitTestVisibleInChrome="True"/>
+
+                <!-- Season info (centre column — stays draggable, read-only labels need no hit-test) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock x:Name="LblSeason" Text="Season 2025-26"
+                               FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
+                               Foreground="#F0F5FF" VerticalAlignment="Center"/>
+                    <TextBlock Text="  ·  " Foreground="#8296B9" FontFamily="Segoe UI" FontSize="9"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblRecord" Text="0-0 Record"
+                               FontFamily="Segoe UI" FontSize="8.75"
+                               Foreground="#8296B9" VerticalAlignment="Center"/>
                 </StackPanel>
-                <!-- Start Match button -->
-                <Button x:Name="BtnStartMatch" Grid.Column="2" Content="▶  Start Match"
-                        Width="130" Height="32" Margin="0,0,10,0"
-                        VerticalAlignment="Center" HorizontalAlignment="Right"
-                        Background="#00BC8C" Foreground="White"
-                        FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
-                        Style="{StaticResource FlatButton}"
-                        Click="BtnStartMatch_Click"/>
+
+                <!-- Right column: Start Match + window controls -->
+                <Grid Grid.Column="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="32"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Window control buttons — top-aligned, right edge -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal"
+                                HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <Button x:Name="BtnMinimize"
+                                Content="&#xE921;"
+                                Style="{StaticResource WinChromeButton}"
+                                Click="BtnMinimize_Click"
+                                ToolTip="Minimize"/>
+                        <Button x:Name="BtnMaxRestore"
+                                Content="&#xE922;"
+                                Style="{StaticResource WinChromeButton}"
+                                Click="BtnMaxRestore_Click"
+                                ToolTip="Maximize"/>
+                        <Button x:Name="BtnClose"
+                                Content="&#xE8BB;"
+                                Style="{StaticResource WinChromeButtonClose}"
+                                Click="BtnClose_Click"
+                                ToolTip="Close"/>
+                    </StackPanel>
+
+                    <!-- Start Match button — vertically centred in remaining space -->
+                    <Button x:Name="BtnStartMatch"
+                            Grid.Row="1"
+                            Content="▶  Start Match"
+                            Width="130" Height="32"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Center" HorizontalAlignment="Right"
+                            Background="#00BC8C" Foreground="White"
+                            FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
+                            Style="{StaticResource FlatButton}"
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            Click="BtnStartMatch_Click"/>
+                </Grid>
             </Grid>
         </Border>
+
         <!-- Nav bar -->
         <Border DockPanel.Dock="Top" Height="52" Background="#0A0E16">
             <Border.BorderBrush><SolidColorBrush Color="#28374F"/></Border.BorderBrush>
             <Border.BorderThickness>0,0,0,1</Border.BorderThickness>
             <StackPanel x:Name="NavBar" Orientation="Horizontal" Margin="16,4,0,0"/>
         </Border>
+
         <!-- Content -->
         <Grid x:Name="ContentGrid" Background="#0D111B"/>
     </DockPanel>

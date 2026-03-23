@@ -1,7 +1,11 @@
 using System;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Shell;
 
 namespace VolleyStatsPro.Helpers
 {
@@ -73,6 +77,111 @@ namespace VolleyStatsPro.Helpers
             "Set"       => Color.FromRgb(251, 146, 60),
             _ => TextSecond
         };
+
+        // ── DWM rounded corners ───────────────────────────────────────────────────
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        private const int DWMWCP_ROUNDSMALL              = 3;
+
+        /// <summary>
+        /// Applies small native rounded corners (Windows 11 DWM).
+        /// Safe to call in any constructor — hooks SourceInitialized internally.
+        /// </summary>
+        public static void SetRoundedCorners(Window w)
+        {
+            w.SourceInitialized += (_, _) =>
+            {
+                var hwnd = new WindowInteropHelper(w).Handle;
+                int pref = DWMWCP_ROUNDSMALL;
+                DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int));
+            };
+        }
+
+        // ── Custom dialog chrome ──────────────────────────────────────────────────
+        private static readonly Color DialogBarBg = Color.FromRgb(10, 14, 22);
+
+        /// <summary>
+        /// Replaces the default OS title bar with a dark custom one matching the main window.
+        /// Call at the end of any dialog constructor, after setting Content.
+        /// </summary>
+        public static void ApplyDialogChrome(Window w, string title)
+        {
+            // Wrap existing content
+            var original = (UIElement)w.Content;
+            w.Content    = null;
+
+            // Title bar
+            var titleGrid = new Grid
+            {
+                Height     = 36,
+                Background = new SolidColorBrush(DialogBarBg)
+            };
+            titleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            titleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var titleText = new TextBlock
+            {
+                Text              = title,
+                Foreground        = BrushTextPrimary,
+                FontFamily        = FontFamily,
+                FontSize          = SizeBody,
+                FontWeight        = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin            = new Thickness(14, 0, 0, 0)
+            };
+            Grid.SetColumn(titleText, 0);
+            titleGrid.Children.Add(titleText);
+
+            var closeBtn = new Button
+            {
+                Content         = "\uE8BB",
+                Width           = 46,
+                Height          = 36,
+                FontFamily      = new FontFamily("Segoe MDL2 Assets"),
+                FontSize        = 10,
+                Foreground      = new SolidColorBrush(Color.FromRgb(192, 206, 221)),
+                Background      = System.Windows.Media.Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding         = new Thickness(0),
+                Style           = (Style)Application.Current.Resources["WinChromeButtonClose"]
+            };
+            closeBtn.Click += (_, _) => w.Close();
+            WindowChrome.SetIsHitTestVisibleInChrome(closeBtn, true);
+            Grid.SetColumn(closeBtn, 1);
+            titleGrid.Children.Add(closeBtn);
+
+            // Separator line below title bar
+            var sep = new System.Windows.Shapes.Rectangle
+            {
+                Height = 1,
+                Fill   = new SolidColorBrush(Color.FromRgb(28, 37, 55))
+            };
+
+            var dock = new DockPanel { Background = new SolidColorBrush(BgPanel) };
+            DockPanel.SetDock(titleGrid, Dock.Top);
+            DockPanel.SetDock(sep,       Dock.Top);
+            dock.Children.Add(titleGrid);
+            dock.Children.Add(sep);
+            dock.Children.Add(original);
+
+            w.Content     = dock;
+            w.WindowStyle = WindowStyle.None;
+            w.Height     += 6;   // compensate: 36px custom bar − ~30px removed system chrome
+
+            WindowChrome.SetWindowChrome(w, new WindowChrome
+            {
+                CaptionHeight         = 36,
+                ResizeBorderThickness  = new Thickness(0),
+                GlassFrameThickness   = new Thickness(0),
+                UseAeroCaptionButtons = false,
+                CornerRadius          = new CornerRadius(0)
+            });
+
+            SetRoundedCorners(w);
+        }
 
         // Helper to create a FormattedText for OnRender usage
         public static FormattedText FT(string text, double size, SolidColorBrush brush,

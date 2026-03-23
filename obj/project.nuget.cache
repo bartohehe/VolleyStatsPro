@@ -1,11 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "hi/UDybj+QQ=",
+  "dgSpecHash": "M1RoMaf8sG0=",
   "success": true,
   "projectFilePath": "E:\\Projekty\\VolleyStatsPro\\VolleyStatsPro.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\barto\\.nuget\\packages\\microsoft.data.sqlite\\8.0.0\\microsoft.data.sqlite.8.0.0.nupkg.sha512",
     "C:\\Users\\barto\\.nuget\\packages\\microsoft.data.sqlite.core\\8.0.0\\microsoft.data.sqlite.core.8.0.0.nupkg.sha512",
+    "C:\\Users\\barto\\.nuget\\packages\\questpdf\\2026.2.4\\questpdf.2026.2.4.nupkg.sha512",
     "C:\\Users\\barto\\.nuget\\packages\\sharpvectors.reloaded\\1.8.5\\sharpvectors.reloaded.1.8.5.nupkg.sha512",
     "C:\\Users\\barto\\.nuget\\packages\\sqlitepclraw.bundle_e_sqlite3\\2.1.6\\sqlitepclraw.bundle_e_sqlite3.2.1.6.nupkg.sha512",
     "C:\\Users\\barto\\.nuget\\packages\\sqlitepclraw.core\\2.1.6\\sqlitepclraw.core.2.1.6.nupkg.sha512",

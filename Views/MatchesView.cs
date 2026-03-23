@@ -258,6 +258,7 @@ namespace VolleyStatsPro.Views
             Background              = Theme.BrushBgPanel;
 
             Content = BuildUI(teams);
+            Theme.ApplyDialogChrome(this, Title);
         }
 
         private UIElement BuildUI(List<Team> teams)

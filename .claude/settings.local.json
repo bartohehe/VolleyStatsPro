@@ -15,7 +15,9 @@
       "Bash(py:*)",
       "Bash(where python:*)",
       "Bash(where python3:*)",
-      "Bash(where py:*)"
+      "Bash(where py:*)",
+      "Bash(dotnet add:*)",
+      "Bash(taskkill:*)"
     ]
   }
 }

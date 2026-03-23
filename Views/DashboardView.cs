@@ -87,7 +87,7 @@ namespace VolleyStatsPro.Views
             var left = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 0, 0, 0) };
             left.Children.Add(new TextBlock
             {
-                Text       = "Team Dashboard",
+                Text       = Loc.Get("dash.title"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeH2,
                 FontWeight = FontWeights.Bold,
@@ -95,7 +95,7 @@ namespace VolleyStatsPro.Views
             });
             left.Children.Add(new TextBlock
             {
-                Text       = "Comprehensive performance analytics and key metrics",
+                Text       = Loc.Get("dash.subtitle"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeBody,
                 Foreground = Theme.BrushTextSecond,
@@ -108,7 +108,7 @@ namespace VolleyStatsPro.Views
             var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 20, 0) };
             right.Children.Add(new TextBlock
             {
-                Text              = "Team:",
+                Text              = Loc.Get("common.team"),
                 FontFamily        = Theme.FontFamily,
                 FontSize          = Theme.SizeBody,
                 Foreground        = Theme.BrushTextSecond,
@@ -192,17 +192,17 @@ namespace VolleyStatsPro.Views
             _statsRow.Children.Clear();
             var cards = new[]
             {
-                ("WIN RATE",   $"{winRate:F0}%",          $"{won}W-{played - won}L",           Theme.Accent),
-                ("ATTACK EFF", $"{agg.AttackEff:P1}",     "K-E/Att",                           Theme.AccentBlue),
-                ("BLOCK AVG",  agg.BlockKill.ToString(),  "Per Set",                           Theme.AccentPurple),
-                ("SERVE EFF",  $"{agg.ServeEff:P1}",      "A/(A+SE)",                          Theme.Warning),
+                (Loc.Get("dash.winrate"),   $"{winRate:F0}%",          $"{won}W-{played - won}L",           Theme.Accent),
+                (Loc.Get("dash.attackeff"), $"{agg.AttackEff:P1}",     Loc.Get("dash.kpi.attack"),          Theme.AccentBlue),
+                (Loc.Get("dash.blockavg"),  agg.BlockKill.ToString(),  Loc.Get("dash.kpi.perSet"),          Theme.AccentPurple),
+                (Loc.Get("dash.serveeff"), $"{agg.ServeEff:P1}",      Loc.Get("dash.kpi.serve"),           Theme.Warning),
             };
             foreach (var (lbl, val, sub, col) in cards)
                 _statsRow.Children.Add(MakeKpiCard(lbl, val, sub, col));
 
             // Bar chart
             var allStats = _statsService.GetAllPlayerStats(team.Id);
-            var barChart = new StatsBarChart { Title = "Player Performance Comparison" };
+            var barChart = new StatsBarChart { Title = Loc.Get("dash.playerperf") };
             barChart.SetBars(allStats.Take(8).Select(s => new StatsBarChart.Bar
             {
                 Label  = s.PlayerName.Split(' ').Last(),
@@ -213,7 +213,7 @@ namespace VolleyStatsPro.Views
             var chartLeftContent = new DockPanel();
             var chartLeftTitle = new TextBlock
             {
-                Text       = "Player Performance Comparison",
+                Text       = Loc.Get("dash.playerperf"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeH3,
                 FontWeight = FontWeights.SemiBold,
@@ -233,28 +233,28 @@ namespace VolleyStatsPro.Views
             radar.SetAxes(
                 new List<RadarChart.Axis>
                 {
-                    new() { Label = "Attack",    Value = Math.Min(agg.AttackTotal    / scale * 100, 100), MaxValue = 100 },
-                    new() { Label = "Serve",     Value = Math.Min(agg.ServeTotal     / scale * 100, 100), MaxValue = 100 },
-                    new() { Label = "Reception", Value = Math.Min(agg.ReceptionTotal / scale * 100, 100), MaxValue = 100 },
-                    new() { Label = "Block",     Value = Math.Min(agg.BlockTotal     / scale * 80,  100), MaxValue = 100 },
-                    new() { Label = "Defense",   Value = Math.Min(agg.DigTotal       / scale * 100, 100), MaxValue = 100 },
-                    new() { Label = "Setting",   Value = Math.Min(agg.SetTotal       / scale * 100, 100), MaxValue = 100 },
+                    new() { Label = Loc.Get("action.attack"),    Value = Math.Min(agg.AttackTotal    / scale * 100, 100), MaxValue = 100 },
+                    new() { Label = Loc.Get("action.serve"),     Value = Math.Min(agg.ServeTotal     / scale * 100, 100), MaxValue = 100 },
+                    new() { Label = Loc.Get("action.reception"), Value = Math.Min(agg.ReceptionTotal / scale * 100, 100), MaxValue = 100 },
+                    new() { Label = Loc.Get("action.block"),     Value = Math.Min(agg.BlockTotal     / scale * 80,  100), MaxValue = 100 },
+                    new() { Label = Loc.Get("action.defense"),   Value = Math.Min(agg.DigTotal       / scale * 100, 100), MaxValue = 100 },
+                    new() { Label = Loc.Get("action.setting"),   Value = Math.Min(agg.SetTotal       / scale * 100, 100), MaxValue = 100 },
                 },
                 comparison: new List<RadarChart.Axis>
                 {
-                    new() { Label = "Attack",    Value = 60, MaxValue = 100 },
-                    new() { Label = "Serve",     Value = 55, MaxValue = 100 },
-                    new() { Label = "Reception", Value = 65, MaxValue = 100 },
-                    new() { Label = "Block",     Value = 50, MaxValue = 100 },
-                    new() { Label = "Defense",   Value = 60, MaxValue = 100 },
-                    new() { Label = "Setting",   Value = 58, MaxValue = 100 },
+                    new() { Label = Loc.Get("action.attack"),    Value = 60, MaxValue = 100 },
+                    new() { Label = Loc.Get("action.serve"),     Value = 55, MaxValue = 100 },
+                    new() { Label = Loc.Get("action.reception"), Value = 65, MaxValue = 100 },
+                    new() { Label = Loc.Get("action.block"),     Value = 50, MaxValue = 100 },
+                    new() { Label = Loc.Get("action.defense"),   Value = 60, MaxValue = 100 },
+                    new() { Label = Loc.Get("action.setting"),   Value = 58, MaxValue = 100 },
                 }
             );
 
             var chartRightContent = new DockPanel();
             var chartRightTitle = new TextBlock
             {
-                Text       = "Skills Analysis vs League Average",
+                Text       = Loc.Get("dash.skills"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeH3,
                 FontWeight = FontWeights.SemiBold,
@@ -281,7 +281,7 @@ namespace VolleyStatsPro.Views
 
             var title = new TextBlock
             {
-                Text              = "Top Performers",
+                Text              = Loc.Get("dash.topperf"),
                 FontFamily        = Theme.FontFamily,
                 FontSize          = Theme.SizeH3,
                 FontWeight        = FontWeights.SemiBold,
@@ -367,7 +367,7 @@ namespace VolleyStatsPro.Views
 
             list.Children.Add(new TextBlock
             {
-                Text       = "pts = Kills + Aces + Blocks",
+                Text       = Loc.Get("dash.topperf.hint"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeSmall,
                 Foreground = Theme.BrushTextMuted,
@@ -385,7 +385,7 @@ namespace VolleyStatsPro.Views
 
             var title = new TextBlock
             {
-                Text       = "Last 8 Matches Form",
+                Text       = Loc.Get("dash.form"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeH3,
                 FontWeight = FontWeights.SemiBold,
@@ -405,7 +405,7 @@ namespace VolleyStatsPro.Views
                 string opp  = isHome ? m.AwayTeamName : m.HomeTeamName;
                 string score = $"{m.HomeScore}-{m.AwayScore}";
                 var wColor  = won ? Theme.BrushSuccess : Theme.BrushDanger;
-                string wLabel = won ? "W" : "L";
+                string wLabel = won ? Loc.Get("dash.w") : Loc.Get("dash.l");
 
                 var row = new Border
                 {

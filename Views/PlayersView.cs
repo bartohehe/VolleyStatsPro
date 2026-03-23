@@ -108,7 +108,7 @@ namespace VolleyStatsPro.Views
             var left = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 0, 0, 0) };
             left.Children.Add(new TextBlock
             {
-                Text       = "Players",
+                Text       = Loc.Get("players.title"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeH2,
                 FontWeight = FontWeights.Bold,
@@ -116,7 +116,7 @@ namespace VolleyStatsPro.Views
             });
             left.Children.Add(new TextBlock
             {
-                Text       = "Individual player profiles and statistics",
+                Text       = Loc.Get("players.subtitle"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeBody,
                 Foreground = Theme.BrushTextSecond,
@@ -128,7 +128,7 @@ namespace VolleyStatsPro.Views
             var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 20, 0) };
             right.Children.Add(new TextBlock
             {
-                Text              = "Team:",
+                Text              = Loc.Get("common.team"),
                 FontFamily        = Theme.FontFamily,
                 FontSize          = Theme.SizeBody,
                 Foreground        = Theme.BrushTextSecond,
@@ -228,7 +228,7 @@ namespace VolleyStatsPro.Views
             nameInfo.Children.Add(new TextBlock { Text = PositionFull(player.Position), FontFamily = Theme.FontFamily, FontSize = Theme.SizeBody, Foreground = Theme.BrushTextSecond, Margin = new Thickness(0, 4, 0, 0) });
             nameInfo.Children.Add(new TextBlock
             {
-                Text       = player.IsActive ? "ACTIVE" : "INACTIVE",
+                Text       = player.IsActive ? Loc.Get("players.active") : Loc.Get("players.inactive"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeSmall,
                 Foreground = player.IsActive ? Theme.BrushSuccess : Theme.BrushDanger,
@@ -248,12 +248,12 @@ namespace VolleyStatsPro.Views
                 Height  = 160,
                 Margin  = new Thickness(0, 0, 0, 4)
             };
-            statGrid.Children.Add(SmallStatCard("ATTACKS",    $"{stats.AttackTotal}",    $"Kill: {stats.AttackKill}  Err: {stats.AttackError}",             Theme.ActionColor("Attack")));
-            statGrid.Children.Add(SmallStatCard("EFFICIENCY", $"{stats.AttackEff:P1}",   "Kills-Errors/Att",                                                Theme.Accent));
-            statGrid.Children.Add(SmallStatCard("SERVES",     $"{stats.ServeTotal}",     $"Ace: {stats.ServeAce}  Err: {stats.ServeError}",                 Theme.ActionColor("Serve")));
-            statGrid.Children.Add(SmallStatCard("BLOCKS",     $"{stats.BlockKill}",      $"Total: {stats.BlockTotal}  Err: {stats.BlockError}",             Theme.ActionColor("Block")));
-            statGrid.Children.Add(SmallStatCard("RECEPTION",  $"{stats.ReceptionEff:P1}",$"Total: {stats.ReceptionTotal}  Perf: {stats.ReceptionPerfect}", Theme.ActionColor("Reception")));
-            statGrid.Children.Add(SmallStatCard("DIGS",       $"{stats.DigTotal}",       $"Errors: {stats.DigError}",                                       Theme.ActionColor("Dig")));
+            statGrid.Children.Add(SmallStatCard(Loc.Get("players.attacks"),    $"{stats.AttackTotal}",    $"Kill: {stats.AttackKill}  Err: {stats.AttackError}",             Theme.ActionColor("Attack")));
+            statGrid.Children.Add(SmallStatCard(Loc.Get("players.efficiency"), $"{stats.AttackEff:P1}",   Loc.Get("players.eff.hint"),                                       Theme.Accent));
+            statGrid.Children.Add(SmallStatCard(Loc.Get("players.serves"),     $"{stats.ServeTotal}",     $"Ace: {stats.ServeAce}  Err: {stats.ServeError}",                 Theme.ActionColor("Serve")));
+            statGrid.Children.Add(SmallStatCard(Loc.Get("players.blocks"),     $"{stats.BlockKill}",      $"Total: {stats.BlockTotal}  Err: {stats.BlockError}",             Theme.ActionColor("Block")));
+            statGrid.Children.Add(SmallStatCard(Loc.Get("players.reception"),  $"{stats.ReceptionEff:P1}",$"Total: {stats.ReceptionTotal}  Perf: {stats.ReceptionPerfect}", Theme.ActionColor("Reception")));
+            statGrid.Children.Add(SmallStatCard(Loc.Get("players.digs"),       $"{stats.DigTotal}",       $"Errors: {stats.DigError}",                                       Theme.ActionColor("Dig")));
             _detailPanel.Children.Add(statGrid);
 
             // ── Heatmaps (3 side by side) ─────────────────────────────────────
@@ -281,7 +281,8 @@ namespace VolleyStatsPro.Views
                     })
                     .ToList();
 
-                var hm = new CourtHeatmapControl { Title = $"{action} Map" };
+                string hmTitle = action == "Attack" ? Loc.Get("players.attackmap") : action == "Serve" ? Loc.Get("players.servemap") : Loc.Get("players.recepmap");
+                var hm = new CourtHeatmapControl { Title = hmTitle };
                 hm.SetData(playerZones);
                 Grid.SetColumn(hm, hmColIdxs[i]);
                 hmGrid.Children.Add(hm);
@@ -310,12 +311,12 @@ namespace VolleyStatsPro.Views
 
         private static string PositionFull(string pos) => pos switch
         {
-            "OH"  => "Outside Hitter",
-            "MB"  => "Middle Blocker",
-            "S"   => "Setter",
-            "L"   => "Libero",
-            "OPP" => "Opposite",
-            "DS"  => "Defensive Specialist",
+            "OH"  => Loc.Get("pos.oh"),
+            "MB"  => Loc.Get("pos.mb"),
+            "S"   => Loc.Get("pos.s"),
+            "L"   => Loc.Get("pos.l"),
+            "OPP" => Loc.Get("pos.opp"),
+            "DS"  => Loc.Get("pos.ds"),
             _     => pos
         };
     }

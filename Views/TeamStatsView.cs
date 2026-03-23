@@ -48,10 +48,10 @@ namespace VolleyStatsPro.Views
                 Style      = (Style)Application.Current.Resources["DarkTabControl"]
             };
 
-            _tabs.Items.Add(MakeTab("Overview",  "overview"));
-            _tabs.Items.Add(MakeTab("Players",   "players"));
-            _tabs.Items.Add(MakeTab("Heatmaps",  "heatmaps"));
-            _tabs.Items.Add(MakeTab("Radar",     "radar"));
+            _tabs.Items.Add(MakeTab(Loc.Get("teamstats.tab.overview"),  "overview"));
+            _tabs.Items.Add(MakeTab(Loc.Get("teamstats.tab.players"),   "players"));
+            _tabs.Items.Add(MakeTab(Loc.Get("teamstats.tab.heatmaps"),  "heatmaps"));
+            _tabs.Items.Add(MakeTab(Loc.Get("teamstats.tab.radar"),     "radar"));
 
             _tabs.SelectionChanged += (_, _) => LoadStats();
 
@@ -72,7 +72,7 @@ namespace VolleyStatsPro.Views
             var titles = new StackPanel();
             titles.Children.Add(new TextBlock
             {
-                Text       = "Team Statistics",
+                Text       = Loc.Get("teamstats.title"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeH2,
                 FontWeight = FontWeights.Bold,
@@ -80,7 +80,7 @@ namespace VolleyStatsPro.Views
             });
             titles.Children.Add(new TextBlock
             {
-                Text       = "Performance metrics and analysis",
+                Text       = Loc.Get("teamstats.subtitle"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeBody,
                 Foreground = Theme.BrushTextSecond,
@@ -96,7 +96,7 @@ namespace VolleyStatsPro.Views
             };
             teamRow.Children.Add(new TextBlock
             {
-                Text              = "Team:",
+                Text              = Loc.Get("common.team"),
                 FontFamily        = Theme.FontFamily,
                 FontSize          = Theme.SizeBody,
                 Foreground        = Theme.BrushTextSecond,
@@ -180,15 +180,15 @@ namespace VolleyStatsPro.Views
                 Background = Theme.BrushBgDark,
                 Margin     = new Thickness(8)
             };
-            kpiRow.Children.Add(StatCard("WIN RATE",    $"{winRate:F0}%",        Theme.Accent));
-            kpiRow.Children.Add(StatCard("ATTACK EFF",  $"{agg.AttackEff:P1}",   Theme.AccentBlue));
-            kpiRow.Children.Add(StatCard("BLOCK KILLS", $"{agg.BlockKill}",      Theme.AccentPurple));
-            kpiRow.Children.Add(StatCard("SERVE EFF",   $"{agg.ServeEff:P1}",    Theme.Warning));
+            kpiRow.Children.Add(StatCard(Loc.Get("teamstats.winrate"),    $"{winRate:F0}%",        Theme.Accent));
+            kpiRow.Children.Add(StatCard(Loc.Get("teamstats.attackeff"),  $"{agg.AttackEff:P1}",   Theme.AccentBlue));
+            kpiRow.Children.Add(StatCard(Loc.Get("teamstats.blockkills"), $"{agg.BlockKill}",      Theme.AccentPurple));
+            kpiRow.Children.Add(StatCard(Loc.Get("teamstats.serveeff"),   $"{agg.ServeEff:P1}",    Theme.Warning));
             Grid.SetRow(kpiRow, 0);
             host.Children.Add(kpiRow);
 
             // Bar chart
-            var chart = new StatsBarChart { Title = "Action Totals", Margin = new Thickness(8) };
+            var chart = new StatsBarChart { Title = Loc.Get("teamstats.totals"), Margin = new Thickness(8) };
             chart.SetBars(new List<StatsBarChart.Bar>
             {
                 new() { Label = "Serve",     Value = agg.ServeTotal,     Color = Theme.ActionColor("Serve") },
@@ -225,18 +225,18 @@ namespace VolleyStatsPro.Views
                 Style                      = (Style)Application.Current.Resources["DarkDataGrid"]
             };
 
-            dg.Columns.Add(Col("#",        nameof(PlayerStats.Number),         40));
-            dg.Columns.Add(Col("Name",     nameof(PlayerStats.PlayerName),     160));
-            dg.Columns.Add(Col("Pos",      nameof(PlayerStats.Position),        55));
-            dg.Columns.Add(Col("Serve",    nameof(PlayerStats.ServeTotal),      60));
-            dg.Columns.Add(Col("Ace",      nameof(PlayerStats.ServeAce),        55));
-            dg.Columns.Add(Col("SrvErr",   nameof(PlayerStats.ServeError),      60));
-            dg.Columns.Add(Col("Attack",   nameof(PlayerStats.AttackTotal),     65));
-            dg.Columns.Add(Col("Kill",     nameof(PlayerStats.AttackKill),      55));
-            dg.Columns.Add(Col("AttErr",   nameof(PlayerStats.AttackError),     60));
-            dg.Columns.Add(Col("Block",    nameof(PlayerStats.BlockKill),       60));
-            dg.Columns.Add(Col("Recep",    nameof(PlayerStats.ReceptionTotal),  65));
-            dg.Columns.Add(Col("Dig",      nameof(PlayerStats.DigTotal),        55));
+            dg.Columns.Add(Col("#",                              nameof(PlayerStats.Number),         40));
+            dg.Columns.Add(Col(Loc.Get("teamstats.col.name"),   nameof(PlayerStats.PlayerName),     160));
+            dg.Columns.Add(Col(Loc.Get("teamstats.col.pos"),    nameof(PlayerStats.Position),        55));
+            dg.Columns.Add(Col("Serve",                          nameof(PlayerStats.ServeTotal),      60));
+            dg.Columns.Add(Col(Loc.Get("teamstats.col.ace"),    nameof(PlayerStats.ServeAce),        55));
+            dg.Columns.Add(Col(Loc.Get("teamstats.col.srverr"), nameof(PlayerStats.ServeError),      60));
+            dg.Columns.Add(Col("Attack",                         nameof(PlayerStats.AttackTotal),     65));
+            dg.Columns.Add(Col(Loc.Get("teamstats.col.kill"),   nameof(PlayerStats.AttackKill),      55));
+            dg.Columns.Add(Col(Loc.Get("teamstats.col.atterr"), nameof(PlayerStats.AttackError),     60));
+            dg.Columns.Add(Col("Block",                          nameof(PlayerStats.BlockKill),       60));
+            dg.Columns.Add(Col(Loc.Get("teamstats.col.recep"),  nameof(PlayerStats.ReceptionTotal),  65));
+            dg.Columns.Add(Col("Dig",                            nameof(PlayerStats.DigTotal),        55));
 
             dg.ItemsSource = allStats;
             host.Children.Add(dg);
@@ -255,7 +255,8 @@ namespace VolleyStatsPro.Views
             for (int i = 0; i < 3; i++)
             {
                 var zones = _statsService.GetZoneData(team.Id, actions[i]);
-                var hm    = new CourtHeatmapControl { Title = $"{actions[i]} Heatmap", Margin = new Thickness(8) };
+                string hmTitle2 = actions[i] == "Serve" ? Loc.Get("teamstats.heat.serve") : actions[i] == "Attack" ? Loc.Get("teamstats.heat.attack") : Loc.Get("teamstats.heat.block");
+                var hm    = new CourtHeatmapControl { Title = hmTitle2, Margin = new Thickness(8) };
                 hm.SetData(zones);
                 Grid.SetColumn(hm, colIdxs[i]);
                 host.Children.Add(hm);

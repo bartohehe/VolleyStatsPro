@@ -28,6 +28,8 @@ namespace VolleyStatsPro
         public MainWindow()
         {
             InitializeComponent();
+            Theme.SetRoundedCorners(this);
+            BtnStartMatch.Content = Loc.Get("header.startmatch");
             LoadSvgIcon();
             BuildNav();
             BuildViews();
@@ -76,7 +78,7 @@ namespace VolleyStatsPro
 
         private void BuildNav()
         {
-            string[] navItems = { "Dashboard", "Players", "Matches", "Team Stats", "Manage Teams" };
+            string[] navItems = { Loc.Get("nav.dashboard"), Loc.Get("nav.players"), Loc.Get("nav.matches"), Loc.Get("nav.teamstats"), Loc.Get("nav.manageteams") };
             // Segoe MDL2 Assets glyphs: Home, Contact, Calendar, BarChart, People
             string[] navIcons = { "\uE80F", "\uE77B", "\uE787", "\uE9D2", "\uE716" };
 
@@ -100,6 +102,38 @@ namespace VolleyStatsPro
                 var btn = new Button { Content = sp, Style = (Style)FindResource("NavButton") };
                 NavBar.Children.Add(btn);
             }
+
+            // Settings gear button — right-aligned via a filler
+            var filler = new FrameworkElement { HorizontalAlignment = HorizontalAlignment.Stretch };
+            DockPanel.SetDock(filler, Dock.Left);
+
+            var settingsSp = new StackPanel { Orientation = Orientation.Horizontal };
+            settingsSp.Children.Add(new TextBlock
+            {
+                Text              = "\uE713",
+                FontFamily        = new FontFamily("Segoe MDL2 Assets"),
+                FontSize          = 13,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin            = new Thickness(0, 0, 8, 0)
+            });
+            settingsSp.Children.Add(new TextBlock
+            {
+                Text              = Loc.Get("nav.settings"),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var btnSettings = new Button
+            {
+                Content = settingsSp,
+                Style   = (Style)FindResource("NavButton"),
+                Margin  = new Thickness(8, 0, 0, 0)
+            };
+            btnSettings.Click += (_, _) =>
+            {
+                var dlg = new SettingsDialog { Owner = this };
+                dlg.ShowDialog();
+            };
+            NavBar.Children.Add(btnSettings);
         }
 
         private void BuildViews()
@@ -204,5 +238,20 @@ namespace VolleyStatsPro
                 ShowView(_liveMatch, null);
             }
         }
+
+        private void Window_StateChanged(object sender, EventArgs e)
+        {
+            if (BtnMaxRestore != null)
+                BtnMaxRestore.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+        }
+
+        private void BtnMinimize_Click(object sender, RoutedEventArgs e)
+            => WindowState = WindowState.Minimized;
+
+        private void BtnMaxRestore_Click(object sender, RoutedEventArgs e)
+            => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+        private void BtnClose_Click(object sender, RoutedEventArgs e)
+            => Close();
     }
 }

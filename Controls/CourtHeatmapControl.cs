@@ -23,9 +23,13 @@ namespace VolleyStatsPro.Controls
         private List<Point> _dots = new();  // individual hit dots (normalized 0-1)
         private string _title = "";
         private bool _showDots = true;
+        private string _homeLabel = "";
+        private string _awayLabel = "";
 
-        public string Title { get => _title; set { _title = value; InvalidateVisual(); } }
-        public bool ShowDots { get => _showDots; set { _showDots = value; InvalidateVisual(); } }
+        public string Title     { get => _title;     set { _title     = value; InvalidateVisual(); } }
+        public bool   ShowDots  { get => _showDots;  set { _showDots  = value; InvalidateVisual(); } }
+        public string HomeLabel { get => _homeLabel; set { _homeLabel = value; InvalidateVisual(); } }
+        public string AwayLabel { get => _awayLabel; set { _awayLabel = value; InvalidateVisual(); } }
 
         public void SetData(List<ZoneData> zones, List<Point>? dots = null, List<ZoneData>? awayZones = null)
         {
@@ -62,6 +66,7 @@ namespace VolleyStatsPro.Controls
             DrawZones(dc, homeRects, _zones);
             DrawZones(dc, awayRects, _awayZones);
             if (_showDots) DrawDots(dc, courtRect);
+            DrawSideLabels(dc, courtRect);
             DrawLegend(dc, courtRect);
         }
 
@@ -214,6 +219,28 @@ namespace VolleyStatsPro.Controls
                 [8] = new Rect(l1, rBack,  cw, rh),
                 [7] = new Rect(l2, rBack,  cw, rh),
             };
+        }
+
+        private void DrawSideLabels(DrawingContext dc, Rect r)
+        {
+            double midY = r.Top + r.Height / 2;
+            var labelBrush = new SolidColorBrush(Color.FromArgb(120, Theme.TextSecond.R, Theme.TextSecond.G, Theme.TextSecond.B));
+            labelBrush.Freeze();
+
+            if (!string.IsNullOrEmpty(_awayLabel))
+            {
+                var ft = Theme.FT(_awayLabel, Theme.SizeSmall, labelBrush, false, 1.25);
+                double x = r.Left + 4;
+                double y = r.Top + (midY - r.Top - ft.Height) / 2;
+                dc.DrawText(ft, new Point(x, y));
+            }
+            if (!string.IsNullOrEmpty(_homeLabel))
+            {
+                var ft = Theme.FT(_homeLabel, Theme.SizeSmall, labelBrush, false, 1.25);
+                double x = r.Left + 4;
+                double y = midY + (r.Bottom - midY - ft.Height) / 2;
+                dc.DrawText(ft, new Point(x, y));
+            }
         }
 
         private void DrawDots(DrawingContext dc, Rect r)
