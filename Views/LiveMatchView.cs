@@ -53,6 +53,17 @@ namespace VolleyStatsPro.Views
         private Border[]    _homeRotCells  = new Border[6];
         private Border[]    _awayRotCells  = new Border[6];
 
+        // ── Player drawer ──────────────────────────────────────────────────────
+        private Border             _drawerPanel    = null!;
+        private StackPanel         _drawerHome     = null!;
+        private StackPanel         _drawerAway     = null!;
+        private TextBlock          _drawerHomeHdr  = null!;
+        private TextBlock          _drawerAwayHdr  = null!;
+        private bool               _drawerOpen     = false;
+        private TranslateTransform _drawerSlide    = null!;
+        private TextBlock          _drawerArrow    = null!;
+        private const double DrawerWidth           = 300;
+
         // ── Navigation ─────────────────────────────────────────────────────────
         public event EventHandler? NavigateBack;
 
@@ -87,8 +98,6 @@ namespace VolleyStatsPro.Views
             if (_match == null) return;
 
             _lblMatchTitle.Text = $"{_match.HomeTeamName}  vs  {_match.AwayTeamName}";
-            _lblHomeScore.Text  = _match.HomeScore.ToString();
-            _lblAwayScore.Text  = _match.AwayScore.ToString();
 
             _homeTeam = new TeamRepository().GetById(_match.HomeTeamId);
             _awayTeam = new TeamRepository().GetById(_match.AwayTeamId);
@@ -97,6 +106,7 @@ namespace VolleyStatsPro.Views
                                       .ToDictionary(p => p.Number, p => p);
             _awayPlayers = _playerRepo.GetByTeam(_match.AwayTeamId)
                                       .ToDictionary(p => p.Number, p => p);
+            RefreshDrawer();
 
             var sets = _setRepo.GetByMatch(matchId);
             if (sets.Count == 0)
@@ -144,6 +154,9 @@ namespace VolleyStatsPro.Views
 
         private UIElement BuildUI()
         {
+            // Wrap everything in a Grid so the drawer can float on top as an overlay layer.
+            var overlay = new Grid();
+
             var root = new DockPanel { Background = Theme.BrushBgDark };
 
             var topBar = BuildTopBar();
@@ -158,8 +171,16 @@ namespace VolleyStatsPro.Views
             DockPanel.SetDock(legendPanel, Dock.Right);
             root.Children.Add(legendPanel);
 
-            root.Children.Add(BuildConsole()); // fills center
-            return root;
+            var center = new DockPanel();
+            var rotBar = BuildRotationSection();
+            DockPanel.SetDock(rotBar, Dock.Top);
+            center.Children.Add(rotBar);
+            center.Children.Add(BuildConsole());
+            root.Children.Add(center);
+
+            overlay.Children.Add(root);
+            overlay.Children.Add(BuildPlayerDrawer());
+            return overlay;
         }
 
         private UIElement BuildTopBar()
@@ -297,9 +318,6 @@ namespace VolleyStatsPro.Views
             sp.Children.Add(btnEndSet);
             sp.Children.Add(btnEndMatch);
 
-            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 6, 0, 6) });
-            sp.Children.Add(BuildRotationSection());
-
             var scroll = new ScrollViewer
             {
                 Content                       = sp,
@@ -312,88 +330,115 @@ namespace VolleyStatsPro.Views
 
         private UIElement BuildRotationSection()
         {
-            var sp = new StackPanel { Margin = new Thickness(8, 0, 8, 8) };
+            var bar = new Border
+            {
+                Background      = Theme.BrushBgPanel,
+                BorderBrush     = Theme.BrushBorder,
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                Padding         = new Thickness(8, 6, 8, 6)
+            };
 
-            // Header
-            var headerRow = new Grid();
-            headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var g = new Grid();
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            sp.Children.Add(new TextBlock
+            // ── Home side (col 0) ──────────────────────────────────────────────
+            var homeStack = new DockPanel();
+            var homeLbl = new TextBlock
+            {
+                Text       = "HOME",
+                Foreground = Theme.BrushAccent,
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                FontWeight = FontWeights.Bold,
+                Margin     = new Thickness(0, 0, 0, 3)
+            };
+            DockPanel.SetDock(homeLbl, Dock.Top);
+            homeStack.Children.Add(homeLbl);
+            homeStack.Children.Add(BuildRotGrid(isHome: true));
+            Grid.SetColumn(homeStack, 0);
+
+            // ── Center: serving indicator + Set Lineup button (col 1) ──────────
+            var centerStack = new StackPanel
+            {
+                Orientation         = Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment   = VerticalAlignment.Center,
+                Margin              = new Thickness(16, 0, 16, 0),
+                MinWidth            = 140
+            };
+            centerStack.Children.Add(new TextBlock
             {
                 Text       = "ROTATION",
                 Foreground = Theme.BrushTextSecond,
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeSmall,
                 FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
                 Margin     = new Thickness(0, 0, 0, 4)
             });
-
-            // Serving indicator
             _lblServingInd = new TextBlock
             {
-                Foreground = Theme.BrushAccent,
+                Foreground          = Theme.BrushAccent,
+                FontFamily          = Theme.FontFamily,
+                FontSize            = Theme.SizeSmall,
+                FontWeight          = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin              = new Thickness(0, 0, 0, 8)
+            };
+            centerStack.Children.Add(_lblServingInd);
+            var btnSetLineup = new Button
+            {
+                Content    = "Set Lineup",
+                Height     = 26,
+                Background = Theme.BrushBgHover,
+                Foreground = Theme.BrushTextSecond,
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                Style      = (Style)Application.Current.Resources["FlatButton"]
+            };
+            btnSetLineup.Click += (_, _) => ShowLineupDialog();
+            centerStack.Children.Add(btnSetLineup);
+            Grid.SetColumn(centerStack, 1);
+
+            // ── Away side (col 2) ──────────────────────────────────────────────
+            var awayStack = new DockPanel();
+            var awayLbl = new TextBlock
+            {
+                Text       = "AWAY",
+                Foreground = Theme.BrushAccentBlue,
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeSmall,
                 FontWeight = FontWeights.Bold,
-                Margin     = new Thickness(0, 0, 0, 6)
+                Margin     = new Thickness(0, 0, 0, 3)
             };
-            sp.Children.Add(_lblServingInd);
+            DockPanel.SetDock(awayLbl, Dock.Top);
+            awayStack.Children.Add(awayLbl);
+            awayStack.Children.Add(BuildRotGrid(isHome: false));
+            Grid.SetColumn(awayStack, 2);
 
-            // Set Lineup button
-            var btnSetLineup = new Button
-            {
-                Content         = "Set Lineup",
-                Height          = 26,
-                Margin          = new Thickness(0, 0, 0, 8),
-                Background      = Theme.BrushBgHover,
-                Foreground      = Theme.BrushTextSecond,
-                FontFamily      = Theme.FontFamily,
-                FontSize        = Theme.SizeSmall,
-                Style           = (Style)Application.Current.Resources["FlatButton"]
-            };
-            btnSetLineup.Click += (_, _) => ShowLineupDialog();
-            sp.Children.Add(btnSetLineup);
-
-            // Home rotation grid
-            sp.Children.Add(new TextBlock
-            {
-                Foreground = Theme.BrushTextSecond,
-                FontFamily = Theme.FontFamily,
-                FontSize   = Theme.SizeSmall,
-                Margin     = new Thickness(0, 0, 0, 2)
-            }); // placeholder, will be set in UpdateRotationDisplay
-            ((TextBlock)sp.Children[sp.Children.Count - 1]).Text = "Home";
-
-            sp.Children.Add(BuildRotGrid(isHome: true));
-
-            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 4, 0, 4) });
-
-            // Away rotation grid
-            sp.Children.Add(new TextBlock
-            {
-                Text       = "Away",
-                Foreground = Theme.BrushTextSecond,
-                FontFamily = Theme.FontFamily,
-                FontSize   = Theme.SizeSmall,
-                Margin     = new Thickness(0, 0, 0, 2)
-            });
-            sp.Children.Add(BuildRotGrid(isHome: false));
-
-            return sp;
+            g.Children.Add(homeStack);
+            g.Children.Add(centerStack);
+            g.Children.Add(awayStack);
+            bar.Child = g;
+            return bar;
         }
 
-        // Court layout row0=[pos1,pos6,pos5]  row1=[pos2,pos3,pos4]
-        private static readonly int[,] RotLayout = { { 1, 6, 5 }, { 2, 3, 4 } };
+        // Home: row0=[pos1,pos6,pos5]  row1=[pos2,pos3,pos4]
+        private static readonly int[,] RotLayout     = { { 4, 3, 2 }, { 5, 6, 1 } };
+        // Away: mirrored — pos1 bottom-right, pos2 top-right, pos3 top-center, etc.
+        private static readonly int[,] AwayRotLayout = { { 4, 3, 2 }, { 5, 6, 1 } };
 
         private UIElement BuildRotGrid(bool isHome)
         {
+            var layout = isHome ? RotLayout : AwayRotLayout;
             var g = new UniformGrid { Rows = 2, Columns = 3 };
             for (int row = 0; row < 2; row++)
             {
                 for (int col = 0; col < 3; col++)
                 {
-                    int pos = RotLayout[row, col];
+                    int pos = layout[row, col];
                     int idx = pos - 1; // array index
 
                     var posLbl = new TextBlock
@@ -642,7 +687,364 @@ namespace VolleyStatsPro.Views
             root.Children.Add(cols);
 
             dlg.Content = root;
-            dlg.ShowDialog();
+            bool saved = dlg.ShowDialog() == true;
+            if (saved)
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render,
+                    (System.Action)(() => { RefreshDrawer(); OpenDrawer(); }));
+        }
+
+        private UIElement BuildPlayerDrawer()
+        {
+            var host = new Grid { HorizontalAlignment = HorizontalAlignment.Right, IsHitTestVisible = true };
+            host.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // tab
+            host.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // panel
+
+            _drawerSlide = new TranslateTransform { X = DrawerWidth };
+            host.RenderTransform = _drawerSlide;
+
+            // ── Tab button ─────────────────────────────────────────────────────
+            _drawerArrow = new TextBlock
+            {
+                Text                = "❮",
+                Foreground          = Theme.BrushAccent,
+                FontSize            = 13,
+                FontWeight          = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            var tabLabel = new TextBlock
+            {
+                Text            = "P\nL\nA\nY\nE\nR\nS",
+                Foreground      = Theme.BrushTextSecond,
+                FontFamily      = Theme.FontFamily,
+                FontSize        = 9,
+                FontWeight      = FontWeights.Bold,
+                TextAlignment   = TextAlignment.Center,
+                Margin          = new Thickness(0, 6, 0, 0)
+            };
+            var tabStack = new StackPanel
+            {
+                Orientation         = Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment   = VerticalAlignment.Center
+            };
+            tabStack.Children.Add(_drawerArrow);
+            tabStack.Children.Add(tabLabel);
+
+            var tabBtn = new Border
+            {
+                Width           = 26,
+                Height          = 110,
+                Background      = new SolidColorBrush(Color.FromRgb(14, 20, 34)),
+                BorderBrush     = Theme.BrushBorder,
+                BorderThickness = new Thickness(1, 1, 0, 1),
+                CornerRadius    = new CornerRadius(8, 0, 0, 8),
+                VerticalAlignment = VerticalAlignment.Center,
+                Cursor          = Cursors.Hand,
+                Child           = tabStack
+            };
+            Grid.SetColumn(tabBtn, 0);
+
+            // ── Drawer panel ───────────────────────────────────────────────────
+            _drawerPanel = new Border
+            {
+                Width           = DrawerWidth,
+                Background      = new SolidColorBrush(Color.FromRgb(10, 14, 26)),
+                BorderBrush     = Theme.BrushBorder,
+                BorderThickness = new Thickness(1, 0, 0, 0),
+                Effect          = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color     = Colors.Black,
+                    Direction = 180,
+                    ShadowDepth = 0,
+                    BlurRadius  = 24,
+                    Opacity     = 0.7
+                }
+            };
+
+            var drawerContent = new DockPanel();
+
+            // Header
+            var headerBorder = new Border
+            {
+                Background      = new SolidColorBrush(Color.FromRgb(14, 20, 36)),
+                BorderBrush     = Theme.BrushBorder,
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                Padding         = new Thickness(14, 10, 14, 10)
+            };
+            var headerRow = new Grid();
+            headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var headerTitle = new TextBlock
+            {
+                Text       = "ROSTER",
+                Foreground = Theme.BrushTextPrimary,
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var closeBtn = new TextBlock
+            {
+                Text       = "✕",
+                Foreground = Theme.BrushTextSecond,
+                FontSize   = 11,
+                Cursor     = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            closeBtn.MouseLeftButtonUp += (_, _) => ToggleDrawer();
+            Grid.SetColumn(headerTitle, 0);
+            Grid.SetColumn(closeBtn, 1);
+            headerRow.Children.Add(headerTitle);
+            headerRow.Children.Add(closeBtn);
+            headerBorder.Child = headerRow;
+            DockPanel.SetDock(headerBorder, Dock.Top);
+            drawerContent.Children.Add(headerBorder);
+
+            var scroll = new ScrollViewer
+            {
+                VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            };
+            var body = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
+
+            // ── Home section ───────────────────────────────────────────────────
+            var homeSectionHdr = new Border
+            {
+                Background      = new SolidColorBrush(Color.FromArgb(40, 0, 188, 140)),
+                BorderBrush     = new SolidColorBrush(Color.FromArgb(80, 0, 188, 140)),
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                Padding         = new Thickness(14, 7, 14, 7)
+            };
+            _drawerHomeHdr = new TextBlock
+            {
+                Text       = "HOME",
+                Foreground = Theme.BrushAccent,
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                FontWeight = FontWeights.Bold
+            };
+            homeSectionHdr.Child = _drawerHomeHdr;
+            body.Children.Add(homeSectionHdr);
+            _drawerHome = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+            body.Children.Add(_drawerHome);
+
+            // ── Away section ───────────────────────────────────────────────────
+            var awaySectionHdr = new Border
+            {
+                Background      = new SolidColorBrush(Color.FromArgb(40, 60, 100, 220)),
+                BorderBrush     = new SolidColorBrush(Color.FromArgb(80, 60, 100, 220)),
+                BorderThickness = new Thickness(0, 1, 0, 1),
+                Padding         = new Thickness(14, 7, 14, 7),
+                Margin          = new Thickness(0, 10, 0, 0)
+            };
+            _drawerAwayHdr = new TextBlock
+            {
+                Text       = "AWAY",
+                Foreground = Theme.BrushAccentBlue,
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                FontWeight = FontWeights.Bold
+            };
+            awaySectionHdr.Child = _drawerAwayHdr;
+            body.Children.Add(awaySectionHdr);
+            _drawerAway = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+            body.Children.Add(_drawerAway);
+
+            scroll.Content = body;
+            drawerContent.Children.Add(scroll);
+            _drawerPanel.Child = drawerContent;
+            Grid.SetColumn(_drawerPanel, 1);
+
+            tabBtn.MouseLeftButtonUp += (_, _) => ToggleDrawer();
+
+            host.Children.Add(tabBtn);
+            host.Children.Add(_drawerPanel);
+            return host;
+        }
+
+        private void ToggleDrawer()
+        {
+            _drawerOpen = !_drawerOpen;
+            AnimateDrawer();
+        }
+
+        private void OpenDrawer()
+        {
+            if (_drawerOpen) return;
+            _drawerOpen = true;
+            AnimateDrawer();
+        }
+
+        private void AnimateDrawer()
+        {
+            var anim = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To             = _drawerOpen ? 0 : DrawerWidth,
+                Duration       = TimeSpan.FromMilliseconds(220),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase
+                    { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+            };
+            _drawerSlide.BeginAnimation(TranslateTransform.XProperty, anim);
+            _drawerArrow.Text = _drawerOpen ? "❯" : "❮";
+        }
+
+        private void RefreshDrawer()
+        {
+            _drawerHome.Children.Clear();
+            _drawerAway.Children.Clear();
+
+            if (_match != null)
+            {
+                _drawerHomeHdr.Text = _match.HomeTeamName.ToUpperInvariant();
+                _drawerAwayHdr.Text = _match.AwayTeamName.ToUpperInvariant();
+            }
+
+            static Color PosColor(string pos) => pos.ToUpperInvariant() switch
+            {
+                "OH"  or "OUTSIDE"  => Color.FromRgb( 56, 139, 220),
+                "MB"  or "MIDDLE"   => Color.FromRgb(220, 120,  56),
+                "S"   or "SETTER"   => Color.FromRgb( 56, 190, 140),
+                "L"   or "LIBERO"   => Color.FromRgb(220, 210,  56),
+                "OPP" or "OPPOSITE" => Color.FromRgb(160,  80, 220),
+                _                   => Color.FromRgb(120, 130, 150)
+            };
+
+            void AddPlayer(StackPanel target, Player p, int[] rotation, Color accentColor)
+            {
+                int rotIdx = Array.IndexOf(rotation, p.Number); // -1 if not in lineup
+                bool inRotation = rotIdx >= 0;
+
+                // Card outer border with left accent strip
+                var card = new Grid { Margin = new Thickness(10, 2, 10, 2) };
+                card.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3) });
+                card.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var strip = new Border
+                {
+                    Background   = new SolidColorBrush(inRotation
+                        ? accentColor
+                        : Color.FromArgb(60, accentColor.R, accentColor.G, accentColor.B)),
+                    CornerRadius = new CornerRadius(2, 0, 0, 2)
+                };
+                Grid.SetColumn(strip, 0);
+
+                var cardInner = new Border
+                {
+                    Background      = new SolidColorBrush(inRotation
+                        ? Color.FromArgb(25, accentColor.R, accentColor.G, accentColor.B)
+                        : Color.FromRgb(14, 20, 34)),
+                    BorderBrush     = new SolidColorBrush(Color.FromArgb(40, accentColor.R, accentColor.G, accentColor.B)),
+                    BorderThickness = new Thickness(0, 1, 1, 1),
+                    CornerRadius    = new CornerRadius(0, 4, 4, 0),
+                    Padding         = new Thickness(8, 7, 8, 7)
+                };
+
+                var row = new Grid();
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });  // badge
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // name
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });  // pos / rot
+
+                // Jersey badge
+                var badge = new Border
+                {
+                    Width        = 30,
+                    Height       = 30,
+                    CornerRadius = new CornerRadius(15),
+                    Background   = new SolidColorBrush(Color.FromArgb(inRotation ? (byte)60 : (byte)30,
+                        accentColor.R, accentColor.G, accentColor.B)),
+                    BorderBrush  = new SolidColorBrush(Color.FromArgb(inRotation ? (byte)180 : (byte)60,
+                        accentColor.R, accentColor.G, accentColor.B)),
+                    BorderThickness = new Thickness(1.5),
+                    Margin       = new Thickness(0, 0, 8, 0),
+                    Child        = new TextBlock
+                    {
+                        Text                = p.Number.ToString(),
+                        Foreground          = new SolidColorBrush(inRotation ? accentColor : Color.FromArgb(160, accentColor.R, accentColor.G, accentColor.B)),
+                        FontFamily          = Theme.FontFamily,
+                        FontSize            = 11,
+                        FontWeight          = FontWeights.Bold,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment   = VerticalAlignment.Center
+                    }
+                };
+                Grid.SetColumn(badge, 0);
+
+                // Name + position
+                var nameStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                nameStack.Children.Add(new TextBlock
+                {
+                    Text         = p.Name,
+                    Foreground   = inRotation ? Theme.BrushTextPrimary : Theme.BrushTextSecond,
+                    FontFamily   = Theme.FontFamily,
+                    FontSize     = Theme.SizeSmall,
+                    FontWeight   = inRotation ? FontWeights.SemiBold : FontWeights.Normal,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                });
+                if (!string.IsNullOrWhiteSpace(p.Position))
+                {
+                    var posColor = PosColor(p.Position);
+                    nameStack.Children.Add(new Border
+                    {
+                        Background      = new SolidColorBrush(Color.FromArgb(40, posColor.R, posColor.G, posColor.B)),
+                        BorderBrush     = new SolidColorBrush(Color.FromArgb(100, posColor.R, posColor.G, posColor.B)),
+                        BorderThickness = new Thickness(1),
+                        CornerRadius    = new CornerRadius(3),
+                        Padding         = new Thickness(4, 1, 4, 1),
+                        Margin          = new Thickness(0, 2, 0, 0),
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                        Child           = new TextBlock
+                        {
+                            Text       = p.Position,
+                            Foreground = new SolidColorBrush(Color.FromArgb(200, posColor.R, posColor.G, posColor.B)),
+                            FontFamily = Theme.FontFamily,
+                            FontSize   = 9,
+                            FontWeight = FontWeights.SemiBold
+                        }
+                    });
+                }
+                Grid.SetColumn(nameStack, 1);
+
+                // Rotation position pill (shown when player is in starting lineup)
+                if (inRotation)
+                {
+                    var rotPill = new Border
+                    {
+                        Background      = new SolidColorBrush(Color.FromArgb(50, accentColor.R, accentColor.G, accentColor.B)),
+                        BorderBrush     = new SolidColorBrush(Color.FromArgb(120, accentColor.R, accentColor.G, accentColor.B)),
+                        BorderThickness = new Thickness(1),
+                        CornerRadius    = new CornerRadius(4),
+                        Padding         = new Thickness(5, 2, 5, 2),
+                        Margin          = new Thickness(6, 0, 0, 0),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Child           = new TextBlock
+                        {
+                            Text       = $"P{rotIdx + 1}",
+                            Foreground = new SolidColorBrush(accentColor),
+                            FontFamily = Theme.FontFamily,
+                            FontSize   = 9,
+                            FontWeight = FontWeights.Bold
+                        }
+                    };
+                    Grid.SetColumn(rotPill, 2);
+                    row.Children.Add(rotPill);
+                }
+
+                row.Children.Add(badge);
+                row.Children.Add(nameStack);
+                cardInner.Child = row;
+                Grid.SetColumn(cardInner, 1);
+                card.Children.Add(strip);
+                card.Children.Add(cardInner);
+                target.Children.Add(card);
+            }
+
+            var homeAccent = Theme.Accent;
+            var awayAccent = Color.FromRgb(60, 100, 220);
+
+            foreach (var p in _homePlayers.Values.OrderBy(p => p.Number))
+                AddPlayer(_drawerHome, p, _homeRotation, homeAccent);
+            foreach (var p in _awayPlayers.Values.OrderBy(p => p.Number))
+                AddPlayer(_drawerAway, p, _awayRotation, awayAccent);
         }
 
         private UIElement BuildLegendPanel()
@@ -1086,8 +1488,6 @@ namespace VolleyStatsPro.Views
             bool homeWon = _currentSet.HomePoints > _currentSet.AwayPoints;
             if (homeWon) _match.HomeScore++; else _match.AwayScore++;
             _matchRepo.UpdateScore(_match.Id, _match.HomeScore, _match.AwayScore, "Live");
-            _lblHomeScore.Text = _match.HomeScore.ToString();
-            _lblAwayScore.Text = _match.AwayScore.ToString();
 
             int nextSet = _currentSet.SetNumber + 1;
             AppendRally($"══ SET {_currentSet.SetNumber} FINISHED  {_currentSet.HomePoints}:{_currentSet.AwayPoints}  ({(homeWon ? _match.HomeTeamName : _match.AwayTeamName)} wins set) ══");
@@ -1133,15 +1533,22 @@ namespace VolleyStatsPro.Views
         private void RefreshHeatmap()
         {
             if (_match == null) return;
-            int teamId = _homeTeam?.Id ?? _match.HomeTeamId;
-            _heatmap.SetData(new StatsService().GetZoneData(teamId, "Attack", _match.Id));
+            var svc    = new StatsService();
+            int homeId = _homeTeam?.Id ?? _match.HomeTeamId;
+            int awayId = _awayTeam?.Id ?? _match.AwayTeamId;
+            _heatmap.SetData(
+                svc.GetZoneData(homeId, "Attack", _match.Id),
+                null,
+                svc.GetZoneData(awayId, "Attack", _match.Id));
         }
 
         private void UpdateSetLabel()
         {
             if (_currentSet != null)
             {
-                _lblCurrentSet.Text = $"Set {_currentSet.SetNumber}  |  {_currentSet.HomePoints} : {_currentSet.AwayPoints}";
+                _lblHomeScore.Text  = _currentSet.HomePoints.ToString();
+                _lblAwayScore.Text  = _currentSet.AwayPoints.ToString();
+                _lblCurrentSet.Text = $"Set {_currentSet.SetNumber}";
                 _lblSetScore.Text   = _match != null ? $"{_match.HomeScore} : {_match.AwayScore}" : "";
             }
         }

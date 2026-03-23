@@ -19,23 +19,23 @@ There are no automated tests in this project.
 
 ## Architecture
 
-**VolleyStatsPro** is a .NET 8.0 WinForms volleyball statistics desktop app (Windows only) using SQLite for persistence.
+**VolleyStatsPro** is a .NET 8.0 WPF volleyball statistics desktop app (Windows only) using SQLite for persistence.
 
 ### Layer overview
 
 | Layer | Path | Responsibility |
 |---|---|---|
-| Entry point | `Program.cs` | App startup |
-| Shell | `MainForm.cs` | Top header, tab navigation, view switching |
+| Entry point | `App.xaml` / `App.xaml.cs` | App startup, global resources |
+| Shell | `MainWindow.xaml` / `MainWindow.xaml.cs` | Top header, tab navigation, view switching |
 | Views | `Views/` | `UserControl`-based panels, one per tab |
 | Data | `Data/Database.cs` | SQLite schema, repository classes, `StatsService` |
 | Models | `Models/Models.cs` | All entity and stats DTOs |
-| Controls | `Controls/` | Custom GDI+ chart and heatmap controls |
+| Controls | `Controls/` | Custom WPF `FrameworkElement` chart and heatmap controls (drawn via `DrawingContext`) |
 | Theme | `Helpers/Theme.cs` | Color palette, fonts, shared drawing helpers |
 
 ### Data flow
 
-`MainForm` hosts all views and switches between them. Views call repository/service methods from `Database.cs` directly. There is no DI container — dependencies are passed manually or instantiated inline.
+`MainWindow` hosts all views and switches between them. Views call repository/service methods from `Database.cs` directly. There is no DI container — dependencies are passed manually or instantiated inline.
 
 ### Database
 
@@ -48,6 +48,11 @@ Volleyball actions follow DataVolley conventions. Result codes: `#` (perfect), `
 ### Key classes
 
 - `StatsService` — aggregates raw `Action` rows into `PlayerStats` / `TeamStats` / `ZoneData`.
-- `CourtHeatmapControl` — renders a 9-zone court heatmap with GDI+; accepts `ZoneData`.
-- `LiveMatchView` — the most complex view; manages active set/rally state, emits `Action` records on each button click.
+- `CourtHeatmapControl` — WPF `FrameworkElement`; renders a full-court 9-zone heatmap via `DrawingContext`. Accepts separate `ZoneData` lists for home (bottom half) and away (top half) sides.
+- `LiveMatchView` — the most complex view; manages active set/rally state, emits `Action` records on each button click. Contains:
+  - DataVolley-style terminal console with command history
+  - Live court heatmap (both sides)
+  - Rotation bar above the terminal showing home and away 2×3 grids (away grid is mirrored to match on-court orientation)
+  - Sliding player drawer (animates in from the right, lists both rosters)
+  - Zone pre-selection buttons and match control buttons (point / end set / end match)
 - `Theme` — static class; all views use `Theme.Colors.*` and `Theme.Fonts.*` for consistent styling.

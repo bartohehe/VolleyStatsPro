@@ -52,3 +52,4 @@ E:\Projekty\VolleyStatsPro\bin\Debug\net8.0-windows\SharpVectors.Model.dll
 E:\Projekty\VolleyStatsPro\bin\Debug\net8.0-windows\SharpVectors.Rendering.Gdi.dll
 E:\Projekty\VolleyStatsPro\bin\Debug\net8.0-windows\SharpVectors.Rendering.Wpf.dll
 E:\Projekty\VolleyStatsPro\bin\Debug\net8.0-windows\SharpVectors.Runtime.Wpf.dll
+E:\Projekty\VolleyStatsPro\obj\Debug\net8.0-windows\VolleyStatsPro.sourcelink.json

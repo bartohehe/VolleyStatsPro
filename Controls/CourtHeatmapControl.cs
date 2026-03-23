@@ -19,6 +19,7 @@ namespace VolleyStatsPro.Controls
     public class CourtHeatmapControl : FrameworkElement
     {
         private List<ZoneData> _zones = new();
+        private List<ZoneData> _awayZones = new();
         private List<Point> _dots = new();  // individual hit dots (normalized 0-1)
         private string _title = "";
         private bool _showDots = true;
@@ -26,9 +27,10 @@ namespace VolleyStatsPro.Controls
         public string Title { get => _title; set { _title = value; InvalidateVisual(); } }
         public bool ShowDots { get => _showDots; set { _showDots = value; InvalidateVisual(); } }
 
-        public void SetData(List<ZoneData> zones, List<Point>? dots = null)
+        public void SetData(List<ZoneData> zones, List<Point>? dots = null, List<ZoneData>? awayZones = null)
         {
             _zones = zones;
+            _awayZones = awayZones ?? new();
             _dots = dots ?? new();
             InvalidateVisual();
         }
@@ -51,9 +53,14 @@ namespace VolleyStatsPro.Controls
                 dc.DrawText(ft, new Point(tx, 8));
             }
 
+            var homeRects = GetZoneRects(courtRect);
+            var awayRects = GetTopZoneRects(courtRect);
+
             DrawCourt(dc, courtRect);
-            DrawZoneMarkings(dc, courtRect);
-            DrawZones(dc, courtRect);
+            DrawZoneMarkings(dc, homeRects);
+            DrawZoneMarkings(dc, awayRects);
+            DrawZones(dc, homeRects, _zones);
+            DrawZones(dc, awayRects, _awayZones);
             if (_showDots) DrawDots(dc, courtRect);
             DrawLegend(dc, courtRect);
         }
@@ -112,9 +119,8 @@ namespace VolleyStatsPro.Controls
         }
 
         // Always-visible zone numbers drawn before the heatmap overlay.
-        private void DrawZoneMarkings(DrawingContext dc, Rect r)
+        private void DrawZoneMarkings(DrawingContext dc, Dictionary<int, Rect> zoneRects)
         {
-            var zoneRects = GetZoneRects(r);
             var markBrush = new SolidColorBrush(Color.FromArgb(100, 180, 200, 230));
             markBrush.Freeze();
 
@@ -127,19 +133,18 @@ namespace VolleyStatsPro.Controls
             }
         }
 
-        private void DrawZones(DrawingContext dc, Rect r)
+        private void DrawZones(DrawingContext dc, Dictionary<int, Rect> zoneRects, List<ZoneData> zones)
         {
-            if (_zones.Count == 0) return;
-            int maxCount = _zones.Max(z => z.Count);
+            if (zones.Count == 0) return;
+            int maxCount = zones.Max(z => z.Count);
             if (maxCount == 0) return;
-
-            var zoneRects = GetZoneRects(r);
 
             var textColor = Theme.TextPrimary;
 
-            foreach (var zd in _zones)
+            foreach (var zd in zones)
             {
                 if (zd.Zone < 1 || zd.Zone > 9) continue;
+                if (!zoneRects.ContainsKey(zd.Zone)) continue;
                 float intensity = zd.Count / (float)maxCount;
                 var zRect = zoneRects[zd.Zone];
 
@@ -168,6 +173,34 @@ namespace VolleyStatsPro.Controls
 
             double l0 = r.Left, l1 = r.Left + cw, l2 = r.Left + 2 * cw;
             double rFront = mid, rMid = mid + rh, rBack = mid + 2 * rh;
+
+            return new Dictionary<int, Rect>
+            {
+                [4] = new Rect(l0, rFront, cw, rh),
+                [3] = new Rect(l1, rFront, cw, rh),
+                [2] = new Rect(l2, rFront, cw, rh),
+                [5] = new Rect(l0, rMid,   cw, rh),
+                [6] = new Rect(l1, rMid,   cw, rh),
+                [1] = new Rect(l2, rMid,   cw, rh),
+                [9] = new Rect(l0, rBack,  cw, rh),
+                [8] = new Rect(l1, rBack,  cw, rh),
+                [7] = new Rect(l2, rBack,  cw, rh),
+            };
+        }
+
+        // Away team zones — top half of court, mirrored vertically relative to home.
+        // Zone numbering is from the away team's own perspective (same as home convention),
+        // so front-row zones (2,3,4) sit closest to the net and back-row (7,8,9) at the top baseline.
+        private Dictionary<int, Rect> GetTopZoneRects(Rect r)
+        {
+            double mid = r.Top + r.Height / 2;
+            double cw = r.Width / 3;
+            double rh = r.Height / 6;
+
+            double l0 = r.Left, l1 = r.Left + cw, l2 = r.Left + 2 * cw;
+            double rFront = mid - rh;       // row nearest net (top half)
+            double rMid   = mid - 2 * rh;  // middle row
+            double rBack  = mid - 3 * rh;  // back row (= r.Top)
 
             return new Dictionary<int, Rect>
             {

@@ -1,5 +1,7 @@
 <img src="Assets/logo.svg" alt="VolleyStats Pro" height="80"/>
 
+> **Built with [Claude](https://claude.ai/code)** — this project was developed end-to-end using Claude Code as the primary coding assistant.
+
 ---
 
 **VolleyStats Pro** is a Windows desktop app for tracking and analysing volleyball matches.
@@ -7,7 +9,7 @@ Log actions play-by-play during live matches, then explore stats, heatmaps, and 
 
 ## Features
 
-- **Live match tracking** — DataVolley-style action codes, zone selection, real-time heatmap
+- **Live match tracking** — DataVolley-style action codes, zone selection, real-time dual-side heatmap, rotation bar, sliding player drawer
 - **Player profiles** — per-player stat cards and 3-zone heatmaps (attack / serve / reception)
 - **Team stats** — aggregated overview, player grid, heatmaps, radar chart vs league baseline
 - **Dashboard** — win rate, attack efficiency, top performers, recent form
