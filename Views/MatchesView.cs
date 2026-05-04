@@ -12,8 +12,9 @@ namespace VolleyStatsPro.Views
 {
     public class MatchesView : System.Windows.Controls.UserControl
     {
-        private readonly MatchRepository _matchRepo = new();
-        private readonly TeamRepository  _teamRepo  = new();
+        private readonly MatchRepository _matchRepo    = new();
+        private readonly TeamRepository  _teamRepo     = new();
+        private readonly StatsService    _statsService = new();
 
         private ListView _matchList = null!;
 
@@ -58,7 +59,7 @@ namespace VolleyStatsPro.Views
             var left = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 0, 0, 0) };
             left.Children.Add(new TextBlock
             {
-                Text       = "Matches",
+                Text       = Loc.Get("matches.title"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeH2,
                 FontWeight = FontWeights.Bold,
@@ -66,7 +67,7 @@ namespace VolleyStatsPro.Views
             });
             left.Children.Add(new TextBlock
             {
-                Text       = "Schedule, results and live tracking",
+                Text       = Loc.Get("matches.subtitle"),
                 FontFamily = Theme.FontFamily,
                 FontSize   = Theme.SizeBody,
                 Foreground = Theme.BrushTextSecond,
@@ -75,7 +76,7 @@ namespace VolleyStatsPro.Views
             Grid.SetColumn(left, 0);
             grid.Children.Add(left);
 
-            var btnNew = MakeButton("+ New Match", Theme.Accent);
+            var btnNew = MakeButton(Loc.Get("matches.new"), Theme.Accent);
             btnNew.Margin = new Thickness(0, 0, 20, 0);
             btnNew.VerticalAlignment = VerticalAlignment.Center;
             btnNew.Click += (_, _) => NewMatch();
@@ -94,12 +95,12 @@ namespace VolleyStatsPro.Views
                 Margin      = new Thickness(16, 4, 16, 8)
             };
 
-            var btnOpen = MakeButton("▶ Open Live", Theme.Accent);
+            var btnOpen = MakeButton(Loc.Get("matches.openlive"), Theme.Accent);
             btnOpen.Margin = new Thickness(0, 0, 8, 0);
             btnOpen.Click += (_, _) => OpenSelectedMatch();
             sp.Children.Add(btnOpen);
 
-            var btnDel = MakeButton("Delete", Theme.Danger);
+            var btnDel = MakeButton(Loc.Get("common.delete"), Theme.Danger);
             btnDel.Click += (_, _) => DeleteMatch();
             sp.Children.Add(btnDel);
 
@@ -119,18 +120,80 @@ namespace VolleyStatsPro.Views
                 SelectionMode   = SelectionMode.Single
             };
 
+            // Row coloring via DataTriggers
+            var style = new Style(typeof(ListViewItem));
+            style.Setters.Add(new Setter(ListViewItem.BackgroundProperty, Theme.BrushBgCard));
+            style.Setters.Add(new Setter(ListViewItem.ForegroundProperty, Theme.BrushTextPrimary));
+            var liveTrigger = new DataTrigger { Binding = new Binding("Status"), Value = "Live" };
+            liveTrigger.Setters.Add(new Setter(ListViewItem.BackgroundProperty,
+                new SolidColorBrush(Color.FromArgb(30, 0, 188, 140))));
+            style.Triggers.Add(liveTrigger);
+            var finishedTrigger = new DataTrigger { Binding = new Binding("Status"), Value = "Finished" };
+            finishedTrigger.Setters.Add(new Setter(ListViewItem.ForegroundProperty, Theme.BrushTextSecond));
+            style.Triggers.Add(finishedTrigger);
+            lv.ItemContainerStyle = style;
+
             var gv = new GridView();
-            gv.Columns.Add(new GridViewColumn { Header = "Date",     Width = 100, DisplayMemberBinding = new Binding("DateStr") });
-            gv.Columns.Add(new GridViewColumn { Header = "Home",     Width = 160, DisplayMemberBinding = new Binding("Home") });
-            gv.Columns.Add(new GridViewColumn { Header = "Score",    Width = 80,  DisplayMemberBinding = new Binding("Score") });
-            gv.Columns.Add(new GridViewColumn { Header = "Away",     Width = 160, DisplayMemberBinding = new Binding("Away") });
-            gv.Columns.Add(new GridViewColumn { Header = "Location", Width = 140, DisplayMemberBinding = new Binding("Location") });
-            gv.Columns.Add(new GridViewColumn { Header = "Status",   Width = 90,  DisplayMemberBinding = new Binding("Status") });
+            gv.Columns.Add(new GridViewColumn { Header = Loc.Get("matches.col.date"),     Width = 100, DisplayMemberBinding = new Binding("DateStr") });
+            gv.Columns.Add(new GridViewColumn { Header = Loc.Get("matches.col.home"),     Width = 160, DisplayMemberBinding = new Binding("Home") });
+            gv.Columns.Add(new GridViewColumn { Header = Loc.Get("matches.col.score"),    Width = 80,  DisplayMemberBinding = new Binding("Score") });
+            gv.Columns.Add(new GridViewColumn { Header = Loc.Get("matches.col.away"),     Width = 160, DisplayMemberBinding = new Binding("Away") });
+            gv.Columns.Add(new GridViewColumn { Header = Loc.Get("matches.col.location"), Width = 140, DisplayMemberBinding = new Binding("Location") });
+            gv.Columns.Add(new GridViewColumn { Header = Loc.Get("matches.col.status"),   Width = 90,  DisplayMemberBinding = new Binding("StatusDisplay") });
+            gv.Columns.Add(BuildActionsColumn());
             lv.View = gv;
 
             lv.MouseDoubleClick += (_, _) => OpenSelectedMatch();
 
             return lv;
+        }
+
+        private GridViewColumn BuildActionsColumn()
+        {
+            // PDF button factory (blue)
+            var pdfFactory = new FrameworkElementFactory(typeof(Button));
+            pdfFactory.SetValue(Button.ContentProperty, "PDF");
+            pdfFactory.SetValue(Button.WidthProperty, 40.0);
+            pdfFactory.SetValue(Button.HeightProperty, 22.0);
+            pdfFactory.SetValue(Button.MarginProperty, new Thickness(0, 0, 4, 0));
+            pdfFactory.SetValue(Button.BackgroundProperty, Theme.BrushAccentBlue);
+            pdfFactory.SetValue(Button.ForegroundProperty, Brushes.White);
+            pdfFactory.SetValue(Button.FontFamilyProperty, Theme.FontFamily);
+            pdfFactory.SetValue(Button.FontSizeProperty, Theme.SizeSmall);
+            pdfFactory.SetValue(Button.PaddingProperty, new Thickness(0));
+            pdfFactory.SetValue(Button.StyleProperty, (Style)System.Windows.Application.Current.Resources["FlatButton"]);
+            pdfFactory.AddHandler(Button.ClickEvent, new RoutedEventHandler((s, e) =>
+            {
+                if ((s as Button)?.DataContext is MatchRow row) ExportMatch(row.MatchId, "pdf");
+                e.Handled = true;
+            }));
+
+            // CSV button factory (red)
+            var csvFactory = new FrameworkElementFactory(typeof(Button));
+            csvFactory.SetValue(Button.ContentProperty, "CSV");
+            csvFactory.SetValue(Button.WidthProperty, 40.0);
+            csvFactory.SetValue(Button.HeightProperty, 22.0);
+            csvFactory.SetValue(Button.BackgroundProperty, Theme.BrushDanger);
+            csvFactory.SetValue(Button.ForegroundProperty, Brushes.White);
+            csvFactory.SetValue(Button.FontFamilyProperty, Theme.FontFamily);
+            csvFactory.SetValue(Button.FontSizeProperty, Theme.SizeSmall);
+            csvFactory.SetValue(Button.PaddingProperty, new Thickness(0));
+            csvFactory.SetValue(Button.StyleProperty, (Style)System.Windows.Application.Current.Resources["FlatButton"]);
+            csvFactory.AddHandler(Button.ClickEvent, new RoutedEventHandler((s, e) =>
+            {
+                if ((s as Button)?.DataContext is MatchRow row) ExportMatch(row.MatchId, "csv");
+                e.Handled = true;
+            }));
+
+            var spFactory = new FrameworkElementFactory(typeof(StackPanel));
+            spFactory.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+            spFactory.SetValue(StackPanel.VerticalAlignmentProperty, VerticalAlignment.Center);
+            spFactory.AppendChild(pdfFactory);
+            spFactory.AppendChild(csvFactory);
+
+            var template = new DataTemplate { VisualTree = spFactory };
+
+            return new GridViewColumn { Header = "", Width = 96, CellTemplate = template };
         }
 
         // ── Data loading ───────────────────────────────────────────────────────
@@ -140,27 +203,23 @@ namespace VolleyStatsPro.Views
             _matchList.Items.Clear();
             foreach (var m in _matchRepo.GetAll())
             {
-                var row = new MatchRow
+                _matchList.Items.Add(new MatchRow
                 {
-                    MatchId = m.Id,
-                    DateStr  = m.Date.ToString("yyyy-MM-dd"),
-                    Home     = m.HomeTeamName,
-                    Score    = $"{m.HomeScore} - {m.AwayScore}",
-                    Away     = m.AwayTeamName,
-                    Location = m.Location,
-                    Status   = m.Status
-                };
-
-                var item = new ListViewItem
-                {
-                    Content    = row,
-                    Foreground = m.Status == "Finished" ? Theme.BrushTextSecond : Theme.BrushTextPrimary,
-                    Background = m.Status == "Live"
-                        ? new SolidColorBrush(Color.FromArgb(30, 0, 188, 140))
-                        : Theme.BrushBgCard,
-                    Tag = m.Id
-                };
-                _matchList.Items.Add(item);
+                    MatchId       = m.Id,
+                    DateStr       = m.Date.ToString("yyyy-MM-dd"),
+                    Home          = m.HomeTeamName,
+                    Score         = $"{m.HomeScore} - {m.AwayScore}",
+                    Away          = m.AwayTeamName,
+                    Location      = m.Location,
+                    Status        = m.Status,
+                    StatusDisplay = m.Status switch
+                    {
+                        "Live"      => Loc.Get("status.live"),
+                        "Finished"  => Loc.Get("status.finished"),
+                        "Scheduled" => Loc.Get("status.scheduled"),
+                        _           => m.Status
+                    }
+                });
             }
         }
 
@@ -170,8 +229,8 @@ namespace VolleyStatsPro.Views
             if (teams.Count < 2)
             {
                 System.Windows.MessageBox.Show(
-                    "You need at least 2 teams to create a match.\nGo to Manage Teams first.",
-                    "Not enough teams",
+                    Loc.Get("matches.noteams"),
+                    Loc.Get("matches.noteams.title"),
                     MessageBoxButton.OK);
                 return;
             }
@@ -186,21 +245,45 @@ namespace VolleyStatsPro.Views
 
         private void OpenSelectedMatch()
         {
-            if (_matchList.SelectedItem is ListViewItem item && item.Tag is int id)
-                OpenLiveMatch?.Invoke(this, id);
+            if (_matchList.SelectedItem is MatchRow row)
+                OpenLiveMatch?.Invoke(this, row.MatchId);
+        }
+
+        private void ExportMatch(int matchId, string format)
+        {
+            var dlg = new Microsoft.Win32.SaveFileDialog();
+            if (format == "csv")
+            {
+                dlg.Filter   = "CSV files (*.csv)|*.csv";
+                dlg.FileName = $"match_{matchId}.csv";
+            }
+            else
+            {
+                dlg.Filter   = "PDF files (*.pdf)|*.pdf";
+                dlg.FileName = $"match_{matchId}.pdf";
+            }
+
+            if (dlg.ShowDialog() != true) return;
+
+            var report = _statsService.GetMatchReport(matchId);
+            if (format == "csv")
+                StatsService.ExportMatchReportToCsv(report, dlg.FileName);
+            else
+                StatsService.ExportMatchReportToPdf(report, dlg.FileName);
+
+            System.Windows.MessageBox.Show(Loc.Get("matches.exportdone"), Loc.Get("matches.exportdone"), MessageBoxButton.OK);
         }
 
         private void DeleteMatch()
         {
-            if (_matchList.SelectedItem is not ListViewItem item) return;
-            int id = (int)item.Tag!;
+            if (_matchList.SelectedItem is not MatchRow row) return;
             var result = System.Windows.MessageBox.Show(
-                "Delete this match and all its data?",
-                "Confirm",
+                Loc.Get("matches.deleteconfirm"),
+                Loc.Get("common.confirm"),
                 MessageBoxButton.YesNo);
             if (result == MessageBoxResult.Yes)
             {
-                _matchRepo.Delete(id);
+                _matchRepo.Delete(row.MatchId);
                 LoadMatches();
             }
         }
@@ -227,13 +310,14 @@ namespace VolleyStatsPro.Views
 
         private class MatchRow
         {
-            public int    MatchId  { get; set; }
-            public string DateStr  { get; set; } = "";
-            public string Home     { get; set; } = "";
-            public string Score    { get; set; } = "";
-            public string Away     { get; set; } = "";
-            public string Location { get; set; } = "";
-            public string Status   { get; set; } = "";
+            public int    MatchId       { get; set; }
+            public string DateStr       { get; set; } = "";
+            public string Home          { get; set; } = "";
+            public string Score         { get; set; } = "";
+            public string Away          { get; set; } = "";
+            public string Location      { get; set; } = "";
+            public string Status        { get; set; } = ""; // raw DB value for DataTriggers
+            public string StatusDisplay { get; set; } = ""; // translated for display
         }
     }
 
@@ -250,7 +334,7 @@ namespace VolleyStatsPro.Views
 
         public NewMatchDialog(List<Team> teams)
         {
-            Title                   = "New Match";
+            Title                   = Loc.Get("newmatch.title");
             Width                   = 380;
             Height                  = 280;
             ResizeMode              = ResizeMode.NoResize;
@@ -258,7 +342,7 @@ namespace VolleyStatsPro.Views
             Background              = Theme.BrushBgPanel;
 
             Content = BuildUI(teams);
-            Theme.ApplyDialogChrome(this, Title);
+            Theme.ApplyDialogChrome(this, Loc.Get("newmatch.title"));
         }
 
         private UIElement BuildUI(List<Team> teams)
@@ -275,19 +359,19 @@ namespace VolleyStatsPro.Views
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             // Home Team
-            AddRow(root, "Home Team:", 0);
+            AddRow(root, Loc.Get("newmatch.home"), 0);
             _cbHome = MakeComboBox();
             Grid.SetRow(_cbHome, 0); Grid.SetColumn(_cbHome, 1);
             root.Children.Add(_cbHome);
 
             // Away Team
-            AddRow(root, "Away Team:", 1);
+            AddRow(root, Loc.Get("newmatch.away"), 1);
             _cbAway = MakeComboBox();
             Grid.SetRow(_cbAway, 1); Grid.SetColumn(_cbAway, 1);
             root.Children.Add(_cbAway);
 
             // Date
-            AddRow(root, "Date:", 2);
+            AddRow(root, Loc.Get("newmatch.date"), 2);
             _date = new DatePicker
             {
                 SelectedDate = DateTime.Today,
@@ -299,7 +383,7 @@ namespace VolleyStatsPro.Views
             root.Children.Add(_date);
 
             // Location
-            AddRow(root, "Location:", 3);
+            AddRow(root, Loc.Get("newmatch.location"), 3);
             _location = new TextBox
             {
                 Background = Theme.BrushBgCard,
@@ -327,12 +411,12 @@ namespace VolleyStatsPro.Views
             Grid.SetRow(btnRow, 5); Grid.SetColumnSpan(btnRow, 2);
             root.Children.Add(btnRow);
 
-            var btnCreate = MakeDialogButton("Create", Theme.Accent);
+            var btnCreate = MakeDialogButton(Loc.Get("newmatch.create"), Theme.Accent);
             btnCreate.Margin = new Thickness(0, 0, 8, 0);
             btnCreate.Click += (_, _) => Save();
             btnRow.Children.Add(btnCreate);
 
-            var btnCancel = MakeDialogButton("Cancel", Theme.BgHover);
+            var btnCancel = MakeDialogButton(Loc.Get("common.cancel"), Theme.BgHover);
             btnCancel.Click += (_, _) => { this.DialogResult = false; Close(); };
             btnRow.Children.Add(btnCancel);
 
@@ -359,12 +443,12 @@ namespace VolleyStatsPro.Views
         {
             if (_cbHome.SelectedItem is not Team home || _cbAway.SelectedItem is not Team away)
             {
-                System.Windows.MessageBox.Show("Select both teams.", "Validation", MessageBoxButton.OK);
+                System.Windows.MessageBox.Show(Loc.Get("newmatch.val.teams"), Loc.Get("common.error"), MessageBoxButton.OK);
                 return;
             }
             if (home.Id == away.Id)
             {
-                System.Windows.MessageBox.Show("Home and Away must be different teams.", "Validation", MessageBoxButton.OK);
+                System.Windows.MessageBox.Show(Loc.Get("newmatch.val.same"), Loc.Get("common.error"), MessageBoxButton.OK);
                 return;
             }
             Result = new Models.Match

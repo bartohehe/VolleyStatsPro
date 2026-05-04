@@ -243,6 +243,17 @@ namespace VolleyStatsPro
         {
             if (BtnMaxRestore != null)
                 BtnMaxRestore.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+
+            if (WindowState == WindowState.Maximized)
+            {
+                MaxWidth = SystemParameters.MaximizedPrimaryScreenWidth;
+                MaxHeight = SystemParameters.MaximizedPrimaryScreenHeight;
+            }
+            else
+            {
+                MaxWidth = double.PositiveInfinity;
+                MaxHeight = double.PositiveInfinity;
+            }
         }
 
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)

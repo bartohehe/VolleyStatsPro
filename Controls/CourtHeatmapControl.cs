@@ -224,21 +224,26 @@ namespace VolleyStatsPro.Controls
         private void DrawSideLabels(DrawingContext dc, Rect r)
         {
             double midY = r.Top + r.Height / 2;
-            var labelBrush = new SolidColorBrush(Color.FromArgb(120, Theme.TextSecond.R, Theme.TextSecond.G, Theme.TextSecond.B));
-            labelBrush.Freeze();
+            var textBrush = new SolidColorBrush(Color.FromArgb(230, Theme.TextPrimary.R, Theme.TextPrimary.G, Theme.TextPrimary.B));
+            textBrush.Freeze();
+            var bgBrush = new SolidColorBrush(Color.FromArgb(140, 10, 14, 22));
+            bgBrush.Freeze();
+            const double padX = 5, padY = 2;
 
             if (!string.IsNullOrEmpty(_awayLabel))
             {
-                var ft = Theme.FT(_awayLabel, Theme.SizeSmall, labelBrush, false, 1.25);
+                var ft = Theme.FT(_awayLabel, Theme.SizeSmall, textBrush, false, 1.25);
                 double x = r.Left + 4;
                 double y = r.Top + (midY - r.Top - ft.Height) / 2;
+                dc.DrawRectangle(bgBrush, null, new Rect(x - padX, y - padY, ft.Width + padX * 2, ft.Height + padY * 2));
                 dc.DrawText(ft, new Point(x, y));
             }
             if (!string.IsNullOrEmpty(_homeLabel))
             {
-                var ft = Theme.FT(_homeLabel, Theme.SizeSmall, labelBrush, false, 1.25);
+                var ft = Theme.FT(_homeLabel, Theme.SizeSmall, textBrush, false, 1.25);
                 double x = r.Left + 4;
                 double y = midY + (r.Bottom - midY - ft.Height) / 2;
+                dc.DrawRectangle(bgBrush, null, new Rect(x - padX, y - padY, ft.Width + padX * 2, ft.Height + padY * 2));
                 dc.DrawText(ft, new Point(x, y));
             }
         }

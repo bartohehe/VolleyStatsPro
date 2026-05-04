@@ -28,7 +28,9 @@ namespace VolleyStatsPro.Views
         private Team?          _homeTeam, _awayTeam;
         private Dictionary<int, Player> _homePlayers = new(); // jersey# → Player
         private Dictionary<int, Player> _awayPlayers = new();
-        private int _selectedZone = 0;
+        private int    _selectedZone       = 0;
+        private string? _selectedMbMovement = null;
+        private readonly Dictionary<string, Button> _mbButtons = new();
 
         // ── UI refs ────────────────────────────────────────────────────────────
         private TextBlock           _lblMatchTitle = null!;
@@ -284,7 +286,9 @@ namespace VolleyStatsPro.Views
             _heatmap = new CourtHeatmapControl { Title = Loc.Get("live.heatmap"), Height = 320, Margin = new Thickness(8, 4, 8, 4) };
             sp.Children.Add(_heatmap);
 
-            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 6, 0, 6) });
+            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 6, 0, 0) });
+            sp.Children.Add(BuildMbMovementBar());
+            sp.Children.Add(new Border { Height = 1, Background = Theme.BrushBorder, Margin = new Thickness(0, 0, 0, 6) });
 
             // Control buttons — rally point row
             var rallyRow = new Grid { Margin = new Thickness(8, 3, 8, 3) };
@@ -323,6 +327,87 @@ namespace VolleyStatsPro.Views
             };
             panel.Child = scroll;
             return panel;
+        }
+
+        private static readonly (string Code, string Desc)[] MbMovements =
+        {
+            ("K1", "Jedynka / haczyk"),
+            ("K2", "Tył"),
+            ("K7", "Suwa"),
+            ("KC", "Os boiska"),
+            ("KM", "Na rozgrywającego"),
+            ("KP", "Przyjęcie do 4"),
+            ("KE", "Bez I tempa"),
+        };
+
+        private UIElement BuildMbMovementBar()
+        {
+            var container = new Border
+            {
+                Background      = new SolidColorBrush(Color.FromArgb(60, 139, 92, 246)),
+                BorderBrush     = Theme.BrushAccentPurple,
+                BorderThickness = new Thickness(0, 1, 0, 1),
+                Padding         = new Thickness(8, 5, 8, 5),
+            };
+
+            var sp = new StackPanel { Orientation = Orientation.Vertical };
+
+            sp.Children.Add(new TextBlock
+            {
+                Text       = "Ruch środkowego",
+                FontFamily = Theme.FontFamily,
+                FontSize   = Theme.SizeSmall,
+                Foreground = Theme.BrushAccentPurple,
+                Margin     = new Thickness(0, 0, 0, 4)
+            });
+
+            var btnRow = new WrapPanel { Orientation = Orientation.Horizontal };
+
+            foreach (var (code, desc) in MbMovements)
+            {
+                var btn = new Button
+                {
+                    Content    = code,
+                    Width      = 38,
+                    Height     = 24,
+                    Margin     = new Thickness(0, 0, 4, 0),
+                    FontFamily = Theme.FontFamily,
+                    FontSize   = Theme.SizeSmall,
+                    Foreground = Brushes.White,
+                    Background = Theme.Brush(Theme.BgHover),
+                    Padding    = new Thickness(0),
+                    ToolTip    = desc,
+                    Style      = (Style)Application.Current.Resources["FlatButton"]
+                };
+                var capturedCode = code;
+                btn.Click += (_, _) => SelectMbMovement(capturedCode);
+                _mbButtons[code] = btn;
+                btnRow.Children.Add(btn);
+            }
+
+            sp.Children.Add(btnRow);
+            container.Child = sp;
+            return container;
+        }
+
+        private void SelectMbMovement(string code)
+        {
+            if (_selectedMbMovement == code)
+            {
+                // Deselect
+                _selectedMbMovement = null;
+                if (_mbButtons.TryGetValue(code, out var b))
+                    b.Background = Theme.Brush(Theme.BgHover);
+                return;
+            }
+
+            // Deselect previous
+            if (_selectedMbMovement != null && _mbButtons.TryGetValue(_selectedMbMovement, out var prev))
+                prev.Background = Theme.Brush(Theme.BgHover);
+
+            _selectedMbMovement = code;
+            if (_mbButtons.TryGetValue(code, out var btn))
+                btn.Background = Theme.BrushAccentPurple;
         }
 
         private UIElement BuildRotationSection()
@@ -1164,6 +1249,10 @@ namespace VolleyStatsPro.Views
             Section("TEAM PREFIX");
             Row("a",  "Away team (none = home)");
 
+            Section("MB MOVEMENT");
+            foreach (var (code, desc) in MbMovements)
+                Row(code, desc, Theme.BrushAccentPurple);
+
             Section("COMMANDS");
             Row("/er h", "Home wins rally",  ConsoleRally);
             Row("/er a", "Away wins rally",  ConsoleRally);
@@ -1340,7 +1429,17 @@ namespace VolleyStatsPro.Views
             foreach (var part in parts)
             {
                 if (string.IsNullOrWhiteSpace(part)) continue;
-                ProcessToken(part.Trim());
+                string trimmed = part.Trim();
+                string upper   = trimmed.ToUpperInvariant();
+                if (upper is "K1" or "K2" or "K7" or "KC" or "KM" or "KP" or "KE")
+                {
+                    SelectMbMovement(upper);
+                    AppendLine($"   ↳ MB movement → {upper}", Theme.BrushAccentPurple);
+                }
+                else
+                {
+                    ProcessToken(trimmed);
+                }
             }
         }
 
@@ -1370,6 +1469,7 @@ namespace VolleyStatsPro.Views
                 ActionType  = tok.Action,
                 Result      = tok.Result,
                 Zone        = zone,
+                Notes       = _selectedMbMovement,
                 PlayerName  = player.Name,
                 TeamName    = team.Name,
                 SetNumber   = _currentSet!.SetNumber,
@@ -1383,7 +1483,8 @@ namespace VolleyStatsPro.Views
             string subInfo  = string.IsNullOrEmpty(tok.SubType) ? "" : $"  [{tok.SubType}]";
             string zoneInfo = zone.HasValue ? $"  Z{zone}" : "";
             string resInfo  = ResultLabel(tok.Result);
-            AppendLine($"   ↳ {teamTag}  #{player.Number} {player.Name}  {tok.Action}{subInfo}{zoneInfo}  {resInfo}", ConsoleOk);
+            string mbInfo   = _selectedMbMovement != null ? $"  [{_selectedMbMovement}]" : "";
+            AppendLine($"   ↳ {teamTag}  #{player.Number} {player.Name}  {tok.Action}{subInfo}{zoneInfo}  {resInfo}{mbInfo}", ConsoleOk);
         }
 
         // ── DataVolley code parser ─────────────────────────────────────────────
